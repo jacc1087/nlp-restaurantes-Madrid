@@ -335,9 +335,11 @@ COCINAS = {
                     "chile relleno", "tamales", "tostadas", "tlayudas"],
 
     # Italiana: pasta y pizza son genéricas, priorizar platos concretos
-    "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "lasana", "ossobuco",
+    "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "lasana", "lasaña", "ossobuco",
                     "tiramisu", "panna cotta", "bruschetta", "focaccia", "risotto funghi",
-                    "tagliatelle ragu", "pappardelle", "gnocchi", "cannoli", "ribollita"],
+                    "tagliatelle ragu", "pappardelle", "gnocchi", "cannoli", "ribollita",
+                    "arancini", "carpaccio", "burrata", "caprese", "pizza napolitana",
+                    "pizza margherita", "stracciatella", "saltimbocca"],
 
     # Japonesa: sushi es genérico en muchos restaurantes fusión
     "japonesa":    ["ramen", "gyozas", "edamame", "udon", "yakitori", "mochi", "katsu",
@@ -364,10 +366,12 @@ COCINAS = {
     "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
                     "merluza asturiana", "sidra", "cabrales", "casadielles"],
 
-    # Gallega: platos muy específicos
-    "gallega":     ["pulpo gallego", "pulpo feria", "empanada gallega", "caldo gallego",
-                    "lacón con grelos", "percebes", "zamburinas", "berberechos",
-                    "navajas", "vieiras", "pimientos padron"],
+    # Gallega: platos muy específicos + variantes sin adjetivo
+    "gallega":     ["pulpo gallego", "pulpo feria", "pulpo", "empanada gallega", "empanada",
+                    "caldo gallego", "lacón con grelos", "lacon", "percebes", "zamburinas",
+                    "berberechos", "navajas", "vieiras", "pimientos padron", "padron",
+                    "filloas", "tarta de santiago", "queso tetilla", "tetilla",
+                    "pote gallego", "zorza", "grelos", "ribeiro", "albarino"],
 
     # Vasca: platos muy específicos
     "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
@@ -496,7 +500,20 @@ def _parsear_platos_str(platos_str: str) -> list:
 
 
 def _score_cocina(row: pd.Series, cocina: str) -> float:
-    """Score de afinidad con una cocina: suma menciones de platos de esa cocina."""
+    """
+    Score de afinidad con una cocina.
+
+    Regla principal: el restaurante debe tener al menos MIN_PLATOS_COCINA platos
+    que pertenezcan a la cocina buscada (contando tanto todos_platos como
+    terminos_tfidf). Si no llega al mínimo, el score es 0 salvo que el nombre
+    del restaurante evoque claramente esa cocina (en ese caso se permite 1 plato
+    mínimo, ya que el nombre es señal muy fuerte).
+
+    Esto evita que restaurantes con un solo plato genérico (ej. "pulpo" en un
+    restaurante de sushi) aparezcan en búsquedas de cocina gallega.
+    """
+    MIN_PLATOS_COCINA = 4  # mínimo de platos distintos de la cocina para puntuar
+
     platos_def = COCINAS.get(cocina, [])
     fuente = _norm(
         str(row.get("todos_platos", "") or "") + " " +
@@ -504,35 +521,63 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         str(row.get("nombre_display", "") or "") + " " +
         str(row.get("nombre", "") or "")
     )
-    score = 0.0
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
-    for plato in platos_def:
-        plato_norm = _norm(plato)
-        if plato_norm in fuente:
-            score += 2.0
-            po = next((p for p in platos_lista if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm), None)
-            if po and po["menciones"] > 1:
-                score += math.log2(po["menciones"])
-    # Bonus si el nombre del restaurante evoca la cocina
+
+    # Bonus por nombre del restaurante (señal muy fuerte)
     NOMBRES_COCINA = {
         "peruana":    ["tampu", "kausa", "peru", "lima", "inca"],
         "mexicana":   ["mexico", "mexicana", "taco", "azteca"],
         "japonesa":   ["japon", "sushi", "ramen", "tokyo", "osaka", "sibuya", "nikkei"],
-        "italiana":   ["italia", "trattoria", "osteria", "pizzeria"],
-        "vasca":      ["euskal", "pintxo", "bilbao", "donosti"],
-        "gallega":    ["galicia", "galleg", "santiag"],
-        "asturiana":  ["astur", "asturias"],
-        "griega":     ["grecia", "greek", "atenas"],
-        "arabe":      ["lebanese", "arab", "libano", "siria"],
+        "italiana":   ["italia", "trattoria", "osteria", "pizzeria", "pasta"],
+        "vasca":      ["euskal", "pintxo", "bilbao", "donosti", "txoko"],
+        "gallega":    ["galicia", "galleg", "santiag", "marisqueria", "marisquer"],
+        "asturiana":  ["astur", "asturias", "sidrer"],
+        "griega":     ["grecia", "greek", "atenas", "hellas"],
+        "arabe":      ["lebanese", "arab", "libano", "siria", "halal"],
         "venezolana": ["venezuela", "venezolan", "arepa"],
         "colombiana": ["colombia", "colombian"],
+        "china":      ["china", "canton", "pekin", "shangai", "dragon"],
+        "tailandesa": ["thai", "tailand", "bangkok", "siam"],
+        "americana":  ["burger", "bbq", "smokehouse", "diner"],
     }
     nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
+    nombre_bonus = 0.0
     for hint in NOMBRES_COCINA.get(cocina, []):
         if hint in nombre_norm:
-            score += 5.0
+            nombre_bonus = 5.0
             break
-    return score
+
+    # Contar platos distintos de la cocina que aparecen en la fuente
+    platos_encontrados = 0
+    score_platos = 0.0
+    for plato in platos_def:
+        plato_norm = _norm(plato)
+        if plato_norm in fuente:
+            platos_encontrados += 1
+            score_platos += 2.0
+            po = next(
+                (p for p in platos_lista
+                 if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
+                None
+            )
+            if po and po["menciones"] > 1:
+                score_platos += math.log2(po["menciones"])
+
+    # Bonus por columna tipo_cocina / cocina si existe en el CSV
+    tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
+    cocina_ascii = cocina.replace("ñ", "n").replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u")
+    if cocina_ascii in tipo or tipo in cocina_ascii:
+        score_platos += 8.0
+        platos_encontrados = max(platos_encontrados, MIN_PLATOS_COCINA)  # fuerza umbral superado
+
+    # Aplicar umbral mínimo:
+    # - Sin nombre_bonus: necesita MIN_PLATOS_COCINA platos
+    # - Con nombre_bonus (nombre evoca la cocina): basta con 1 plato
+    umbral = 1 if nombre_bonus > 0 else MIN_PLATOS_COCINA
+    if platos_encontrados < umbral:
+        return 0.0
+
+    return round(score_platos + nombre_bonus, 2)
 
 
 def _score_texto(row: pd.Series, tokens_query: list) -> float:
@@ -800,8 +845,12 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
     if cocina:
-        df_con_match = df_filtrado[df_filtrado["_score_match"] > 4]
-        if len(df_con_match) > 0:
+        # Solo incluir restaurantes que superaron el umbral de platos (score > 0)
+        df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
+        if len(df_con_match) >= 3:
+            df_filtrado = df_con_match
+        elif len(df_con_match) > 0:
+            # Si hay menos de 3 con score > 0, los mostramos igualmente (son los únicos relevantes)
             df_filtrado = df_con_match
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
