@@ -331,7 +331,7 @@ COCINAS = {
     "italiana":    ["pasta", "pizza", "risotto", "lasana", "carbonara", "tiramisu", "penne", "ravioli", "tagliatelle", "focaccia", "bruschetta"],
     "japonesa":    ["sushi", "sashimi", "ramen", "gyozas", "edamame", "tempura", "miso", "udon", "yakitori", "mochi", "katsu"],
     "india":       ["tikka", "masala", "biryani", "naan", "samosa", "curry", "korma", "dal", "tandoori", "chapati", "pakora"],
-    "peruana":     ["ceviche", "tiradito", "lomo saltado", "causa", "anticuchos", "leche de tigre", "aji de gallina", "chicharron"],
+    "peruana":     ["ceviche amazónico", "ceviche pacha", "lomo saltado", "causa limeña", "tiradito", "anticuchos", "leche de tigre", "aji de gallina", "arroz chaufa", "suspiro", "tequeños", "pachamanquero", "ceviche", "tampu", "kausa"],
     "española":    ["paella", "tortilla", "croquetas", "gazpacho", "salmorejo", "jamon", "cocido", "fabada", "pulpo", "patatas bravas", "pisto", "rabo", "chuleton"],
     "asturiana":   ["cachopo", "fabada", "sidra", "morcilla", "oricios", "pote"],
     "gallega":     ["pulpo", "empanada", "caldo gallego", "lacón", "percebes", "mejillones", "navajas", "zamburinas", "berberechos"],
@@ -428,16 +428,40 @@ def _parsear_platos_str(platos_str: str) -> list:
 def _score_cocina(row: pd.Series, cocina: str) -> float:
     """Score de afinidad con una cocina: suma menciones de platos de esa cocina."""
     platos_def = COCINAS.get(cocina, [])
-    fuente = _norm(str(row.get("todos_platos", "") or "") + " " + str(row.get("terminos_tfidf", "") or "") + " " + str(row.get("nombre_display", "") or ""))
+    fuente = _norm(
+        str(row.get("todos_platos", "") or "") + " " +
+        str(row.get("terminos_tfidf", "") or "") + " " +
+        str(row.get("nombre_display", "") or "") + " " +
+        str(row.get("nombre", "") or "")
+    )
     score = 0.0
+    platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
     for plato in platos_def:
-        if plato in fuente:
+        plato_norm = _norm(plato)
+        if plato_norm in fuente:
             score += 2.0
-            # Bonus por menciones reales
-            platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
-            po = next((p for p in platos_lista if plato in _norm(p["nombre"]) or _norm(p["nombre"]) in plato), None)
+            po = next((p for p in platos_lista if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm), None)
             if po and po["menciones"] > 1:
                 score += math.log2(po["menciones"])
+    # Bonus si el nombre del restaurante evoca la cocina
+    NOMBRES_COCINA = {
+        "peruana":    ["tampu", "kausa", "peru", "lima", "inca"],
+        "mexicana":   ["mexico", "mexicana", "taco", "azteca"],
+        "japonesa":   ["japon", "sushi", "ramen", "tokyo", "osaka", "sibuya", "nikkei"],
+        "italiana":   ["italia", "trattoria", "osteria", "pizzeria"],
+        "vasca":      ["euskal", "pintxo", "bilbao", "donosti"],
+        "gallega":    ["galicia", "galleg", "santiag"],
+        "asturiana":  ["astur", "asturias"],
+        "griega":     ["grecia", "greek", "atenas"],
+        "arabe":      ["lebanese", "arab", "libano", "siria"],
+        "venezolana": ["venezuela", "venezolan", "arepa"],
+        "colombiana": ["colombia", "colombian"],
+    }
+    nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
+    for hint in NOMBRES_COCINA.get(cocina, []):
+        if hint in nombre_norm:
+            score += 5.0
+            break
     return score
 
 

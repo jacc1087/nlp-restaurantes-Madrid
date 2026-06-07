@@ -3,3 +3,6 @@ __pycache__/
 .env
 venv/
 .DS_Store
+analisis_restaurantes.csv
+ranking.csv
+.cache_coords.json
