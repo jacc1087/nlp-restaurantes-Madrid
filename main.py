@@ -798,6 +798,12 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     if len(df_filtrado) < 3 and len(criterios) > 0:
         df_filtrado = df.copy()
 
+    # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
+    if cocina:
+        df_con_match = df_filtrado[df_filtrado["_score_match"] > 4]
+        if len(df_con_match) > 0:
+            df_filtrado = df_con_match
+
     # ── Ordenar y tomar top N ──────────────────────────────────────
     n_resultados = 6 if (cocina or tokens or criterios) else 8
     df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
