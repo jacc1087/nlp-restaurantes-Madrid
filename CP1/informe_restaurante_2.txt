@@ -1,0 +1,190 @@
+
+=================================================================
+  INFORME DE ANÁLISIS — KATHMANDU TANDOORI HOUSE
+=================================================================
+  Restaurante ID  : 2
+  Nombre          : Kathmandu Tandoori House
+  Nº de reseñas   : 90
+  Valoración media: 4.90 / 5.0
+  Modelo          : nlptown/bert-base-multilingual-uncased-sentiment
+
+
+-----------------------------------------------------------------
+  1. Distribución de estrellas (modelo)
+-----------------------------------------------------------------
+  ★★★★★   81 reseñas ( 90.0%)  ████████████████████████████████████████
+  ★★★★     4 reseñas (  4.4%)  ████
+  ★★★      1 reseñas (  1.1%)  █
+  ★★       0 reseñas (  0.0%)  
+  ★        4 reseñas (  4.4%)  ████
+
+  Media de estrellas según el modelo: 4.76 / 5.0
+
+
+-----------------------------------------------------------------
+  2. Sentimiento global (agrupado)
+-----------------------------------------------------------------
+  ✅  Positivo    :  85 reseñas  (94.4%)
+  ➖  Neutro      :   1 reseñas  (1.1%)
+  ❌  Negativo    :   4 reseñas  (4.4%)
+
+
+-----------------------------------------------------------------
+  3. Análisis por dimensión
+-----------------------------------------------------------------
+  ⚠️  Dimensiones con menos de 10 menciones = NO REPRESENTATIVAS.
+
+  [SERVICIO]  — 55/90 reseñas (61.1%)
+    ✅ Positivo: 54   ❌ Negativo: 0   ➖ Neutro: 1
+    Media estrellas: 4.91 ★
+
+  [COMIDA]  — 76/90 reseñas (84.4%)
+    ✅ Positivo: 74   ❌ Negativo: 1   ➖ Neutro: 1
+    Media estrellas: 4.88 ★
+
+  [AMBIENTE]  — 6/90 reseñas (6.7%)  ⚠️  NO REPRESENTATIVA
+    ✅ Positivo: 5   ❌ Negativo: 0   ➖ Neutro: 1
+    Media estrellas: 4.67 ★  (no fiable, muestra insuficiente)
+
+  [PRECIO]  — 15/90 reseñas (16.7%)
+    ✅ Positivo: 14   ❌ Negativo: 1   ➖ Neutro: 0
+    Media estrellas: 4.67 ★
+
+  [VELOCIDAD]  — 15/90 reseñas (16.7%)
+    ✅ Positivo: 14   ❌ Negativo: 0   ➖ Neutro: 1
+    Media estrellas: 4.87 ★
+
+  [RUIDO]  — 0/90 reseñas (0.0%)  ⚠️  NO REPRESENTATIVA
+    ✅ Positivo: 0   ❌ Negativo: 0   ➖ Neutro: 0
+    Media estrellas: 0 ★  (no fiable, muestra insuficiente)
+
+  [LIMPIEZA]  — 2/90 reseñas (2.2%)  ⚠️  NO REPRESENTATIVA
+    ✅ Positivo: 2   ❌ Negativo: 0   ➖ Neutro: 0
+    Media estrellas: 5.0 ★  (no fiable, muestra insuficiente)
+
+
+-----------------------------------------------------------------
+  4. Platos más mencionados
+-----------------------------------------------------------------
+  █████████████████████████  naan / pan (25x)
+  ████████████████████████  pollo (genérico) (24x)
+  ████████████████████████  queso paneer (24x)
+  ████████████████  masala (genérico) (16x)
+  █████████████  tikka masala (13x)
+  ████████████  mango lassi / mango (12x)
+  ████████  arroz / basmati (8x)
+  ███████  biryani (7x)
+  ███████  verduras / vegetal (7x)
+  ██████  cordero / lamb (6x)
+  ████  samosa (4x)
+  ███  curry (3x)
+  ██  korma (2x)
+  ██  butter chicken (2x)
+  █  vindaloo (1x)
+
+
+-----------------------------------------------------------------
+  5. Personal mencionado
+-----------------------------------------------------------------
+  No se detectaron nombres de personal con frecuencia suficiente.
+
+
+-----------------------------------------------------------------
+  6. Términos más característicos (TF-IDF)
+-----------------------------------------------------------------
+  comida                         0.1243
+  pollo                          0.0719
+  buen                           0.0622
+  buena                          0.0616
+  queso                          0.061
+  amable                         0.0606
+  barajas                        0.0599
+  servicio                       0.0587
+  india                          0.0555
+  comida india                   0.05
+  madrid                         0.0492
+  restaurante                    0.0491
+  lugar                          0.0488
+  naan                           0.0486
+  excelente                      0.0464
+  recomendable                   0.0449
+  precio                         0.0432
+  mango                          0.0417
+  personal                       0.0413
+  rápido                         0.04
+
+
+-----------------------------------------------------------------
+  7. Reseñas con valoración negativa
+-----------------------------------------------------------------
+  [★  confianza: 0.757]
+  → "para ser la primera vez muy mal se rien en tu cara para los precios q hay los postes muy malos y sosos no volvere la atencion al cliente es pesina no volvere"
+
+  [★  confianza: 0.599]
+  → "indio de barrio del monton regulinchi medio vacio salvo por un puñado de extranjeros paso por barajas y que se guian por las opiniones sospecho que compradas"
+
+  [★  confianza: 0.367]  ⚠️  CONFIANZA BAJA — revisar
+  → "samara versura nan queso pollo tikamasala barido de mango pollo tanduri y cafe americano todo delisioso"
+
+  [★  confianza: 0.423]  ⚠️  CONFIANZA BAJA — revisar
+  → "la escala en barajas la cenamos allí y fuimos pidiendo todos los platos populares como pollo tikka masala naan queso"
+
+
+
+-----------------------------------------------------------------
+  7b. Reseñas con baja confianza (posibles errores del modelo)
+-----------------------------------------------------------------
+  Umbral: 0.5 — se recomienda revisión manual.
+
+  [★★★★★ positivo  confianza: 0.422]
+  → "indio y nepali resturante todo bueno comida pollo tikka masal naan de queso pollo balti naan de queso batido mqngo higly recimended"
+
+  [★★★★★ positivo  confianza: 0.424]
+  → "tuve una corta escala en madrid y decidí probar algo de comida india aquí pedí biryani y queso naan ambos salieron rápido y estaban llenos de sabor el personal era muy amable y recibimiento que hizo la comida aún mejor u"
+
+  [★★★★ positivo  confianza: 0.447]
+  → "personal muy amable nos gusto mas la decoracion del otro restaurante pero la comida igual de rica en ambas"
+
+  [★★★★★ positivo  confianza: 0.452]
+  → "fuimos aquí por comida nutritiva y buen wifi recomendaría si viajas al aeropuerto y estás buscando un buen lugar para comer"
+
+  [★★★★ positivo  confianza: 0.459]
+  → "un lugar donde hay una comida muy variada verdura carne muy poco pescado la bodega es muy sencilla el personal muy agradable y muy atento"
+
+  [★★★★★ positivo  confianza: 0.476]
+  → "la buena comida india redtaurant en barajas manteca de madrid pollo naan queso batido mango muy delicioso me gusta mery mucho repetiré"
+
+  [★★★★★ positivo  confianza: 0.483]
+  → "vinimos a cenar un sabado sin reserva y tuvimos que esperar una hora pero merecio la pena la comida riquisima y las camareras muy amables"
+
+  [★★★★★ positivo  confianza: 0.483]
+  → "thali es muy agradable nan kali es muy bueno buen servicio actitud camarera es amable y agradable el servicio es muy rápido recomiendo"
+
+  [★★★★ positivo  confianza: 0.487]
+  → "buen lugar para la cocina india muy recomendable para aquellos que buscan un buen curry y biryani debes ir mientras perforas la calle de madrid"
+
+  [★★★★★ positivo  confianza: 0.488]
+  → "la comida estaba muy buena lo recomiendo si vais por barajas y os gusta la comida hindú personal también muy amable"
+
+  [★★★★★ positivo  confianza: 0.493]
+  → "al ser de birmingham nos vemos como conocedores del curry tomamos el pollo al birio con salsa de madras fue excelente el pan de nana de ajo era genial justo el tamaño correcto nuestra comida con cervezas llegó a menos de"
+
+  [★★★★★ positivo  confianza: 0.493]
+  → "he comido el pollo tikka phall naan con queso que delicia recomendado el té nepalí y el chupito de mango muy delicioso"
+
+  [★★★★ positivo  confianza: 0.496]
+  → "buen restaurante con comidas abundantes en relación al precio y sabores tradicionales los camareros son muy amables y nos invitaron a chupitos de mango"
+
+
+
+-----------------------------------------------------------------
+  8. Resumen ejecutivo
+-----------------------------------------------------------------
+  • Valoración media (Google): 4.90/5 sobre 90 reseñas.
+  • Media de estrellas según el modelo: 4.76/5.
+  • 94.4% de las reseñas clasificadas como positivas (4-5 estrellas).
+  • Platos más mencionados: naan / pan, pollo (genérico), queso paneer.
+  • Dimensión mejor valorada: 'servicio' (4.91★).
+  • Reseñas negativas: 4.
+  • Reseñas con baja confianza: 15 — revisar manualmente.
+  • Dimensiones NO representativas: ambiente, ruido, limpieza.

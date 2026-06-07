@@ -1,0 +1,201 @@
+
+=================================================================
+  INFORME DE ANÁLISIS — LOS MONTES DE GALICIA
+=================================================================
+  Restaurante ID  : 1
+  Nombre          : Los Montes de Galicia
+  Nº de reseñas   : 90
+  Valoración media: 4.80 / 5.0
+  Modelo          : nlptown/bert-base-multilingual-uncased-sentiment
+
+
+-----------------------------------------------------------------
+  1. Distribución de estrellas (modelo)
+-----------------------------------------------------------------
+  ★★★★★   79 reseñas ( 87.8%)  ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+  ★★★★     9 reseñas ( 10.0%)  ★★★★★★★★★
+  ★★★      1 reseñas (  1.1%)  ★
+  ★★       1 reseñas (  1.1%)  ★
+  ★        0 reseñas (  0.0%)  
+
+  Media de estrellas según el modelo: 4.84 / 5.0
+
+
+-----------------------------------------------------------------
+  2. Sentimiento global (agrupado)
+-----------------------------------------------------------------
+  ✅  Positivo    :  88 reseñas  (97.8%)
+  ➖  Neutro      :   1 reseñas  (1.1%)
+  ❌  Negativo    :   1 reseñas  (1.1%)
+
+
+-----------------------------------------------------------------
+  3. Análisis por dimensión
+-----------------------------------------------------------------
+  ⚠️  Nota: dimensiones con menos de 10 menciones se marcan
+      como NO REPRESENTATIVAS y deben interpretarse con cautela.
+
+  [SERVICIO]  — 82/90 reseñas (91.1%)
+    ✅ Positivo: 80   ❌ Negativo: 1   ➖ Neutro: 1
+    Media de estrellas en esta dimensión: 4.83 ★
+
+  [COMIDA]  — 81/90 reseñas (90.0%)
+    ✅ Positivo: 79   ❌ Negativo: 1   ➖ Neutro: 1
+    Media de estrellas en esta dimensión: 4.83 ★
+
+  [AMBIENTE]  — 20/90 reseñas (22.2%)
+    ✅ Positivo: 20   ❌ Negativo: 0   ➖ Neutro: 0
+    Media de estrellas en esta dimensión: 4.9 ★
+
+  [PRECIO]  — 4/90 reseñas (4.4%)  ⚠️  NO REPRESENTATIVA (pocas menciones)
+    ✅ Positivo: 3   ❌ Negativo: 0   ➖ Neutro: 1
+    Media de estrellas: 4.0 ★  (no fiable, muestra insuficiente)
+
+  [VELOCIDAD]  — 5/90 reseñas (5.6%)  ⚠️  NO REPRESENTATIVA (pocas menciones)
+    ✅ Positivo: 5   ❌ Negativo: 0   ➖ Neutro: 0
+    Media de estrellas: 4.8 ★  (no fiable, muestra insuficiente)
+
+  [RUIDO]  — 1/90 reseñas (1.1%)  ⚠️  NO REPRESENTATIVA (pocas menciones)
+    ✅ Positivo: 1   ❌ Negativo: 0   ➖ Neutro: 0
+    Media de estrellas: 5.0 ★  (no fiable, muestra insuficiente)
+
+  [LIMPIEZA]  — 12/90 reseñas (13.3%)
+    ✅ Positivo: 12   ❌ Negativo: 0   ➖ Neutro: 0
+    Media de estrellas en esta dimensión: 5.0 ★
+
+
+-----------------------------------------------------------------
+  4. Platos más mencionados
+-----------------------------------------------------------------
+  █████████  pulpo (9x)
+  ████████  bacalao (8x)
+  ████████  buñuelos (8x)
+  ███████  lomo (7x)
+  ██████  postre (6x)
+  █████  menú (5x)
+  █████  pescado (5x)
+  ████  croquetas (4x)
+  ████  lasaña (4x)
+  ████  merluza (4x)
+  ████  carne (4x)
+  ████  tarta (4x)
+  ███  cecina (3x)
+  ███  vino (3x)
+  ██  carpaccio (2x)
+
+
+-----------------------------------------------------------------
+  5. Personal mencionado por nombre
+-----------------------------------------------------------------
+  Manuel          35x
+  Ayoub           15x
+  Anthony         7x
+  Alex            5x
+  Pedro           4x
+  Samy            4x
+  Roberto         4x
+  Ricardo         4x
+  Miguel          2x
+  Álex            1x
+  Eloi            1x
+
+
+-----------------------------------------------------------------
+  6. Términos más característicos (TF-IDF)
+-----------------------------------------------------------------
+  comida                         0.1135
+  manuel                         0.0884
+  servicio                       0.0802
+  atención                       0.0749
+  trato                          0.0729
+  experiencia                    0.0637
+  gracias                        0.0592
+  excelente                      0.0588
+  espectacular                   0.0578
+  buena                          0.0554
+  ayoub                          0.0531
+  calidad                        0.0509
+  duda                           0.0477
+  atento                         0.046
+  súper                          0.0459
+  increíble                      0.0431
+  excepcional                    0.0422
+  amable                         0.0417
+  personal                       0.0415
+  platos                         0.0415
+
+
+-----------------------------------------------------------------
+  7. Reseñas con valoración negativa del modelo
+-----------------------------------------------------------------
+  [★★  confianza: 0.404]  ⚠️  CONFIANZA BAJA — revisar manualmente
+  → "al hacer una reserva por favor pregunte por eloy su servicio es excesivo realmente la comida era fantástica pero el servicio de eloy claramente hizo que esta fuera la mejor cena que tuvimos en madrid"
+
+
+
+-----------------------------------------------------------------
+  7b. Reseñas con baja confianza del modelo (posibles falsos positivos/negativos)
+-----------------------------------------------------------------
+  ⚠️  Umbral de confianza: 0.5 — estas clasificaciones son dudosas
+      y se recomienda revisión manual.
+
+  [★★★★★ positivo  confianza: 0.319]
+  → "sin duda venir a este restaurante es un acierto seguro ellos mismos te lo dicen que si no te gusta un plato se lo puedes devolver porque todo está exquisito la atención de miguel ha sido impecable estaba todo espectacula"
+
+  [★★★★ positivo  confianza: 0.421]
+  → "no es la primera vez que vamos pero hacía ya tiempo que no íbamos espectacular en todo la comida increíble y la atención también con especial mención a ricardo que nos ha atendido estupendamente sitio totalmente recomend"
+
+  [★★★★ positivo  confianza: 0.422]
+  → "comida espectacular en platos de un nivel exquisito servicio con clase y precio algo alto pero al saborearlo se olvida todo creo que todo es recomendable en la carta creo que es difícil elegir solo una cosa de lo que pro"
+
+  [★★★★ positivo  confianza: 0.438]
+  → "espectacular la comida pero sobre todo el trato de ayoub todo súper bien explicado y servido sin una de volveremos y eso que venimos de lejos"
+
+  [★★★★ positivo  confianza: 0.452]
+  → "todo estaba bastante bueno en especial las croquetas de cecina y el pulpo a ma gallega cabe a destacar el gran servicio de ayoub el camarero que nos ha atendido muy buena comida y mejor trato"
+
+  [★★★★ positivo  confianza: 0.455]
+  → "buena comida y buen servicio con don manuel"
+
+  [★★★★★ positivo  confianza: 0.468]
+  → "buen ambiente buena comida y buen servicio pedimos una pieza de carne al punto y estaba ideal tal y como pedimos rapido y delicioso gracias anthony"
+
+  [★★★★ positivo  confianza: 0.468]
+  → "el ambiente local y comida excelente de gran calidad y bien presentada pero lo mas importante ha sido el trato personal el servicio ofrecido por ayoub ha sido inmejorable seguro que volveremos de"
+
+  [★★★★ positivo  confianza: 0.47]
+  → "nuestra experiencia fue excelente pero queremos destacar sobre todo al camarero manuel que fue el punto principal de la velada súper atento amable y siempre pendiente de cada detalle nos hizo sentir muy cómodos y bien at"
+
+  [★★★★★ positivo  confianza: 0.47]
+  → "la comida estuvo excelente destacamos el pulpo el pescado en su punto y los buñuelos deliciosos el ambiente fue perfecto y el servicio impecable mención especial para roberto por si gran profesionalidad cercanía y atenci"
+
+  [★★★★ positivo  confianza: 0.479]
+  → "la comida de primera el lugar muy acogedor y bonito pero la atención es excepcional especial mención a ayoub manuel y por supuesto anthony pero en realidad todos gracias por hacernos vivir una experiencia inolvidable"
+
+  [★★★★★ positivo  confianza: 0.479]
+  → "lugar tranquilo y agradable la comida muy buena todo el personal muy agradables nuestro mesero fue ricardo un profesional de los pies a la cabeza un trato con los clientes excepcional si algún día vuelve nos a madrid nos"
+
+  [★★★★★ positivo  confianza: 0.488]
+  → "si vives o estás de paso por madrid como fue nuestro caso es una parada obligatoria el trato es inmejorable destacar especialmente a manuel que nos atendió con mucha atención y cuidado en cada detalle para hacer que nues"
+
+  [★★★★★ positivo  confianza: 0.488]
+  → "local acogedor de lujo y toque familiar con disimulada sofisticación los camareros amables y profesionales nos recibe anthony con exquisita elegancia y buenos modales la comida muy rica y sin pretensiones de michellín re"
+
+  [★★★★★ positivo  confianza: 0.496]
+  → "nos animamos a visitarlo guiados por las excelentes críticas y la experiencia no pudo ser mejor la atención fue impecable manuel y álex nos atendieron de maravilla siempre atentos y acertando plenamente con sus recomenda"
+
+
+
+-----------------------------------------------------------------
+  8. Resumen ejecutivo
+-----------------------------------------------------------------
+  • Valoración media (Google): 4.80/5 sobre 90 reseñas.
+  • Media de estrellas según el modelo nlptown: 4.84/5.
+  • 97.8% de las reseñas clasificadas como positivas (4-5 estrellas).
+  • Platos estrella más mencionados: pulpo, bacalao, buñuelos.
+  • Personal muy valorado. 'Manuel' es el más citado (35x).
+  • Dimensión mejor valorada (representativa): 'limpieza' (5.0★).
+  • Reseñas negativas detectadas por el modelo: 1.
+  • Reseñas con baja confianza (< 0.5): 16 — revisar manualmente.
+  • Dimensiones NO representativas por pocas menciones: precio, velocidad, ruido.
+  •   → Sus resultados deben interpretarse con cautela.
