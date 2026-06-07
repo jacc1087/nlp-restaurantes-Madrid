@@ -352,7 +352,7 @@ COCINAS = {
     # Peruana: solo platos genuinamente peruanos
     "peruana":     ["lomo saltado", "lomo salteado", "causa limena", "tiradito",
                     "anticuchos", "arroz chaufa", "aji de gallina", "ceviche amazonico",
-                    "ceviche pacha", "pachamanquero", "suspiro limeno", "tequeños",
+                    "ceviche pacha", "pachamanquero", "suspiro limeno",
                     "leche de tigre", "chicharron peruano"],
 
     # Española clásica
@@ -389,8 +389,9 @@ COCINAS = {
                     "kibbeh", "fattoush", "couscous"],
 
     # Venezolana
-    "venezolana":  ["arepa", "pabellon criollo", "cachapa", "hallaca", "pernil",
-                    "caraotas", "tequeño", "mandocas", "chicha"],
+    "venezolana":  ["arepa", "arepas", "pabellon criollo", "cachapa", "cachapas",
+                    "hallaca", "pernil", "caraotas", "tequeño", "tequeños",
+                    "mandocas", "chicha", "pabellon"],
 
     # Colombiana
     "colombiana":  ["bandeja paisa", "ajiaco", "sancocho", "empanada colombiana",
@@ -776,7 +777,7 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             df["_score_calidad"] * 0.35 +
             (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.25
         )
-    elif cocina or df["_score_match"].max() > 0:
+    elif cocina or df["_score_match"].max() > 2:
         # Con match de texto/cocina: 50% match + 50% calidad
         df["_score_final"] = (
             (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.50 +
