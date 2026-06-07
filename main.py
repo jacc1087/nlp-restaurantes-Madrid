@@ -420,6 +420,8 @@ COCINAS = {
     "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
                      "couscous marroqui", "tajine", "merguez", "harira"],
 }
+# Nota: COCINAS se mantiene para compatibilidad futura pero la lógica de scoring
+# usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
     "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
@@ -503,18 +505,88 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     """
     Score de afinidad con una cocina.
 
-    Regla principal: el restaurante debe tener al menos MIN_PLATOS_COCINA platos
-    que pertenezcan a la cocina buscada (contando tanto todos_platos como
-    terminos_tfidf). Si no llega al mínimo, el score es 0 salvo que el nombre
-    del restaurante evoque claramente esa cocina (en ese caso se permite 1 plato
-    mínimo, ya que el nombre es señal muy fuerte).
+    Lógica de dos capas para evitar falsos positivos:
 
-    Esto evita que restaurantes con un solo plato genérico (ej. "pulpo" en un
-    restaurante de sushi) aparezcan en búsquedas de cocina gallega.
+    1. Platos PROPIOS: muy identificativos de esa cocina (zamburiñas → gallega,
+       ramen → japonesa, tikka masala → india...). Cada uno suma fuerte.
+
+    2. Platos COMUNES: presentes en esa cocina pero también en muchas otras
+       (pulpo, empanada, pasta...). Solo suman si hay al menos 1 plato propio
+       o un nombre de restaurante que evoque la cocina.
+
+    Umbral de entrada: el restaurante necesita al menos MIN_SEÑALES_PROPIAS
+    señales de platos propios, O tener nombre_bonus + al menos 1 plato
+    (propio o común). Sin eso, score = 0.
     """
-    MIN_PLATOS_COCINA = 4  # mínimo de platos distintos de la cocina para puntuar
+    MIN_SEÑALES_PROPIAS = 1  # mínimo de platos propios para puntuar sin nombre_bonus
 
-    platos_def = COCINAS.get(cocina, [])
+    # Platos propios (muy identificativos) y comunes (necesitan contexto)
+    PLATOS_PROPIOS = {
+        "gallega":     ["zamburinas", "zamburiñas", "percebes", "navajas", "vieiras",
+                        "berberechos", "caldo gallego", "lacon", "grelos", "padron",
+                        "filloas", "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
+        "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
+                        "marmitako", "kokotxas", "txakoli", "chipirones en su tinta",
+                        "bacalao al pil pil", "merluza en salsa verde", "pil pil"],
+        "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
+                        "cabrales", "casadielles", "sidra"],
+        "japonesa":    ["ramen", "gyozas", "edamame", "udon", "yakitori", "mochi", "katsu",
+                        "takoyaki", "tonkatsu", "nigiri", "onigiri", "okonomiyaki",
+                        "miso ramen", "soba", "sashimi", "tempura ebi"],
+        "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal",
+                        "tandoori", "chapati", "pakora", "butter chicken", "palak paneer",
+                        "chana masala", "lassi", "dosa", "saag"],
+        "peruana":     ["lomo saltado", "lomo salteado", "causa limena", "anticuchos",
+                        "arroz chaufa", "aji de gallina", "leche de tigre",
+                        "ceviche amazonico", "ceviche pacha", "pachamanquero",
+                        "suspiro limeno", "chicharron peruano", "tiradito"],
+        "venezolana":  ["arepas", "arepa", "pabellon criollo", "cachapa", "cachapas",
+                        "hallaca", "pernil", "caraotas", "tequeños", "mandocas", "chicha"],        "mexicana":    ["burrito", "quesadilla", "fajitas", "enchilada", "pozole",
+                        "carnitas", "mole", "tacos cochinita", "tacos pastor", "chilaquiles",
+                        "chile relleno", "tamales", "tostadas", "tlayudas"],
+        "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki",
+                        "baklava", "dolmades", "kleftiko", "taramasalata"],
+        "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "ossobuco",
+                        "panna cotta", "risotto funghi", "tagliatelle ragu", "pappardelle",
+                        "gnocchi", "cannoli", "ribollita", "arancini", "burrata",
+                        "stracciatella", "saltimbocca", "pizza napolitana"],
+        "francesa":    ["foie gras", "confit de pato", "bouillabaisse", "coq au vin",
+                        "escargots", "crepe suzette", "soufflé", "cassoulet", "magret"],
+        "arabe":       ["shawarma", "falafel", "tabule", "baba ganoush", "labneh",
+                        "shakshuka", "kibbeh", "fattoush", "couscous", "pita"],
+        "colombiana":  ["bandeja paisa", "ajiaco", "sancocho", "changua", "lechona",
+                        "tamales colombianos"],
+        "china":       ["dim sum", "wonton", "pato pekin", "chow mein", "baozi",
+                        "mapo tofu", "pato laqueado"],
+        "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde thai",
+                        "curry rojo thai", "satay", "som tam", "larb", "mango sticky rice"],
+        "americana":   ["smash burger", "pulled pork", "costillas bbq", "mac and cheese",
+                        "chicken wings", "brisket", "coleslaw", "corn dog"],
+        "española":    ["cocido madrileno", "fabada", "pisto manchego", "croquetas jamon",
+                        "tortilla española", "rabo de toro", "callos madrilenos", "oreja",
+                        "patatas bravas", "gazpacho", "salmorejo"],
+        "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
+                         "couscous marroqui", "tajine", "merguez", "harira"],
+    }
+    # Platos que aparecen en múltiples cocinas — solo cuentan con contexto
+    PLATOS_COMUNES = {
+        "gallega":    ["pulpo", "empanada", "berberechos", "mejillones", "almejas"],
+        "vasca":      ["bacalao", "merluza", "anchoas"],
+        "italiana":   ["lasana", "lasaña", "bruschetta", "focaccia", "tiramisu",
+                       "risotto", "pasta", "pizza"],
+        "japonesa":   ["sushi", "tempura", "gyozas"],
+        "peruana":    ["ceviche"],
+        "mexicana":   ["tacos", "guacamole", "nachos"],
+        "española":   ["paella", "chuleton", "jamón", "chorizo"],
+        "francesa":   ["ratatouille", "tartare", "foie", "crepe"],
+        "arabe":      ["hummus", "kebab"],
+        "venezolana": ["pabellon", "chicha"],
+        "americana":  ["brownie", "costillar"],
+    }
+
+    propios_def = PLATOS_PROPIOS.get(cocina, [])
+    comunes_def = PLATOS_COMUNES.get(cocina, [])
+
     fuente = _norm(
         str(row.get("todos_platos", "") or "") + " " +
         str(row.get("terminos_tfidf", "") or "") + " " +
@@ -539,6 +611,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "china":      ["china", "canton", "pekin", "shangai", "dragon"],
         "tailandesa": ["thai", "tailand", "bangkok", "siam"],
         "americana":  ["burger", "bbq", "smokehouse", "diner"],
+        "española":   ["taberna", "meson", "mesón", "bodega", "tasca"],
     }
     nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
     nombre_bonus = 0.0
@@ -547,37 +620,49 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
             nombre_bonus = 5.0
             break
 
-    # Contar platos distintos de la cocina que aparecen en la fuente
-    platos_encontrados = 0
-    score_platos = 0.0
-    for plato in platos_def:
+    # Bonus por columna tipo_cocina si existe en el CSV
+    tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
+    cocina_ascii = _norm(cocina)
+    if cocina_ascii in tipo or tipo in cocina_ascii:
+        nombre_bonus = max(nombre_bonus, 8.0)
+
+    # Contar platos propios encontrados
+    señales_propias = 0
+    score_propios = 0.0
+    for plato in propios_def:
         plato_norm = _norm(plato)
         if plato_norm in fuente:
-            platos_encontrados += 1
-            score_platos += 2.0
+            señales_propias += 1
+            score_propios += 3.0
             po = next(
                 (p for p in platos_lista
                  if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
                 None
             )
             if po and po["menciones"] > 1:
-                score_platos += math.log2(po["menciones"])
+                score_propios += math.log2(po["menciones"])
 
-    # Bonus por columna tipo_cocina / cocina si existe en el CSV
-    tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
-    cocina_ascii = cocina.replace("ñ", "n").replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u")
-    if cocina_ascii in tipo or tipo in cocina_ascii:
-        score_platos += 8.0
-        platos_encontrados = max(platos_encontrados, MIN_PLATOS_COCINA)  # fuerza umbral superado
+    # Platos comunes: solo suman si hay contexto (platos propios O nombre_bonus)
+    score_comunes = 0.0
+    tiene_contexto = señales_propias >= MIN_SEÑALES_PROPIAS or nombre_bonus > 0
+    if tiene_contexto:
+        for plato in comunes_def:
+            plato_norm = _norm(plato)
+            if plato_norm in fuente:
+                score_comunes += 1.5
+                po = next(
+                    (p for p in platos_lista
+                     if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
+                    None
+                )
+                if po and po["menciones"] > 1:
+                    score_comunes += math.log2(po["menciones"]) * 0.5
 
-    # Aplicar umbral mínimo:
-    # - Sin nombre_bonus: necesita MIN_PLATOS_COCINA platos
-    # - Con nombre_bonus (nombre evoca la cocina): basta con 1 plato
-    umbral = 1 if nombre_bonus > 0 else MIN_PLATOS_COCINA
-    if platos_encontrados < umbral:
+    # Sin contexto y sin nombre_bonus → score 0 (evita falsos positivos)
+    if not tiene_contexto:
         return 0.0
 
-    return round(score_platos + nombre_bonus, 2)
+    return round(score_propios + score_comunes + nombre_bonus, 2)
 
 
 def _score_texto(row: pd.Series, tokens_query: list) -> float:
