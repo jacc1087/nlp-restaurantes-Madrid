@@ -322,7 +322,7 @@ def _detectar_zona(consulta: str) -> Optional[tuple]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MOTOR DE BÚSQUEDA (lógica del Proyecto B portada a Python)
+# MOTOR DE BÚSQUEDA 
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Cocinas y sus platos representativos (igual que generar_agente.py)
@@ -452,8 +452,6 @@ INTENCIONES_CRITERIO = {
     "ninos": ["ninos", "ninas", "bebe", "bebes", "familia", "familiar",
               "peques", "pequenos", "crio", "crios", "chaval", "silla de bebe",
               "con los ninos", "plan familiar", "salir en familia"],
-    "mascotas": ["perro", "perros", "mascota", "mascotas", "peludo", "peludos",
-                 "admiten perros", "con mi perro", "dog friendly"],
     "terraza": ["terraza", "terrazas", "exterior", "al aire libre", "fuera",
                 "patio", "veladores", "jardin", "comer fuera"],
     "vistas": ["vistas", "vista", "panoramica", "azotea", "rooftop", "mirador", "skyline"],
@@ -518,7 +516,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     señales de platos propios, O tener nombre_bonus + al menos 1 plato
     (propio o común). Sin eso, score = 0.
     """
-    MIN_SEÑALES_PROPIAS = 1  # mínimo de platos propios para puntuar sin nombre_bonus
+    MIN_SEÑALES_PROPIAS = 2  # mínimo de platos propios para puntuar sin nombre_bonus
 
     # Platos propios (muy identificativos) y comunes (necesitan contexto)
     PLATOS_PROPIOS = {
