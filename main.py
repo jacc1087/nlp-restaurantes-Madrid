@@ -621,7 +621,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     # Bonus por columna tipo_cocina si existe en el CSV
     tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
     cocina_ascii = _norm(cocina)
-    if cocina_ascii in tipo or tipo in cocina_ascii:
+    if tipo and (cocina_ascii in tipo or tipo in cocina_ascii):
         nombre_bonus = max(nombre_bonus, 8.0)
 
     # Contar platos propios encontrados
