@@ -326,25 +326,94 @@ def _detectar_zona(consulta: str) -> Optional[tuple]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Cocinas y sus platos representativos (igual que generar_agente.py)
+# Platos EXCLUSIVOS por cocina — solo los que identifican claramente el restaurante
+# Se evitan platos genéricos que aparecen en cualquier restaurante (ceviche, curry, pasta, etc.)
 COCINAS = {
-    "mexicana":    ["tacos", "burrito", "quesadilla", "fajitas", "guacamole", "nachos", "enchilada", "pozole", "carnitas", "mole"],
-    "italiana":    ["pasta", "pizza", "risotto", "lasana", "carbonara", "tiramisu", "penne", "ravioli", "tagliatelle", "focaccia", "bruschetta"],
-    "japonesa":    ["sushi", "sashimi", "ramen", "gyozas", "edamame", "tempura", "miso", "udon", "yakitori", "mochi", "katsu"],
-    "india":       ["tikka", "masala", "biryani", "naan", "samosa", "curry", "korma", "dal", "tandoori", "chapati", "pakora"],
-    "peruana":     ["ceviche amazónico", "ceviche pacha", "lomo saltado", "causa limeña", "tiradito", "anticuchos", "leche de tigre", "aji de gallina", "arroz chaufa", "suspiro", "tequeños", "pachamanquero", "ceviche", "tampu", "kausa"],
-    "española":    ["paella", "tortilla", "croquetas", "gazpacho", "salmorejo", "jamon", "cocido", "fabada", "pulpo", "patatas bravas", "pisto", "rabo", "chuleton"],
-    "asturiana":   ["cachopo", "fabada", "sidra", "morcilla", "oricios", "pote"],
-    "gallega":     ["pulpo", "empanada", "caldo gallego", "lacón", "percebes", "mejillones", "navajas", "zamburinas", "berberechos"],
-    "vasca":       ["pintxos", "pintxo", "gilda", "bacalao", "txangurro", "marmitako", "kokotxas", "pil pil", "txakoli"],
-    "francesa":    ["foie", "confit", "ratatouille", "crepe", "croissant", "souffle", "coq au vin"],
-    "griega":      ["hummus", "gyros", "souvlaki", "falafel", "tzatziki", "moussaka", "baklava"],
-    "arabe":       ["hummus", "falafel", "kebab", "shawarma", "tabule", "cuscus", "pita"],
-    "venezolana":  ["arepa", "pabellon", "cachapa", "tequeno", "hallaca", "pernil", "caraotas"],
-    "colombiana":  ["bandeja paisa", "ajiaco", "empanada", "arepa", "sancocho"],
-    "china":       ["dim sum", "wonton", "pato pekines", "chow mein", "arroz frito", "spring roll", "dumplings"],
-    "tailandesa":  ["pad thai", "curry verde", "curry rojo", "tom yum", "massaman", "satay"],
-    "americana":   ["hamburguesa", "hamburger", "burger", "costillas", "costillar", "pulled pork", "cheesecake", "brownie", "bbq", "barbacoa"],
-    "mediterranea": ["hummus", "falafel", "pita", "baba ganoush", "tabule", "couscous", "labneh", "shakshuka"],
+    # Platos muy específicos de cocina mexicana auténtica
+    "mexicana":    ["burrito", "quesadilla", "fajitas", "guacamole", "enchilada", "pozole",
+                    "carnitas", "mole", "tacos cochinita", "tacos pastor", "chilaquiles",
+                    "chile relleno", "tamales", "tostadas", "tlayudas"],
+
+    # Italiana: pasta y pizza son genéricas, priorizar platos concretos
+    "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "lasana", "ossobuco",
+                    "tiramisu", "panna cotta", "bruschetta", "focaccia", "risotto funghi",
+                    "tagliatelle ragu", "pappardelle", "gnocchi", "cannoli", "ribollita"],
+
+    # Japonesa: sushi es genérico en muchos restaurantes fusión
+    "japonesa":    ["ramen", "gyozas", "edamame", "udon", "yakitori", "mochi", "katsu",
+                    "takoyaki", "tonkatsu", "tempura ebi", "nigiri", "onigiri",
+                    "okonomiyaki", "miso ramen", "soba"],
+
+    # India: curry es muy genérico
+    "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal",
+                    "tandoori", "chapati", "pakora", "butter chicken", "palak paneer",
+                    "chana masala", "lassi", "dosa", "saag"],
+
+    # Peruana: solo platos genuinamente peruanos
+    "peruana":     ["lomo saltado", "lomo salteado", "causa limena", "tiradito",
+                    "anticuchos", "arroz chaufa", "aji de gallina", "ceviche amazonico",
+                    "ceviche pacha", "pachamanquero", "suspiro limeno", "tequeños",
+                    "leche de tigre", "chicharron peruano"],
+
+    # Española clásica
+    "española":    ["paella", "cocido madrileno", "fabada", "gazpacho", "salmorejo",
+                    "patatas bravas", "croquetas jamon", "tortilla española", "pisto manchego",
+                    "rabo de toro", "chuleton", "callos madrilenos", "oreja"],
+
+    # Asturiana: platos muy específicos
+    "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
+                    "merluza asturiana", "sidra", "cabrales", "casadielles"],
+
+    # Gallega: platos muy específicos
+    "gallega":     ["pulpo gallego", "pulpo feria", "empanada gallega", "caldo gallego",
+                    "lacón con grelos", "percebes", "zamburinas", "berberechos",
+                    "navajas", "vieiras", "pimientos padron"],
+
+    # Vasca: platos muy específicos
+    "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
+                    "marmitako", "kokotxas", "bacalao al pil pil", "txakoli",
+                    "merluza en salsa verde", "chipirones en su tinta"],
+
+    # Francesa
+    "francesa":    ["foie gras", "confit de pato", "ratatouille", "bouillabaisse",
+                    "coq au vin", "escargots", "crepe suzette", "soufflé",
+                    "cassoulet", "tartare", "magret"],
+
+    # Griega
+    "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki",
+                    "baklava", "dolmades", "kleftiko", "taramasalata"],
+
+    # Árabe/Libanesa
+    "arabe":       ["shawarma", "falafel", "tabule", "hummus casero", "pita",
+                    "baba ganoush", "labneh", "shakshuka", "kebab",
+                    "kibbeh", "fattoush", "couscous"],
+
+    # Venezolana
+    "venezolana":  ["arepa", "pabellon criollo", "cachapa", "hallaca", "pernil",
+                    "caraotas", "tequeño", "mandocas", "chicha"],
+
+    # Colombiana
+    "colombiana":  ["bandeja paisa", "ajiaco", "sancocho", "empanada colombiana",
+                    "changua", "lechona", "tamales colombianos"],
+
+    # China
+    "china":       ["dim sum", "wonton", "pato pekin", "chow mein",
+                    "spring roll", "dumplings", "baozi", "mapo tofu",
+                    "pato laqueado", "cerdo agridulce"],
+
+    # Tailandesa
+    "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde thai",
+                    "curry rojo thai", "satay", "som tam", "khao pad",
+                    "larb", "mango sticky rice"],
+
+    # Americana
+    "americana":   ["smash burger", "pulled pork", "costillas bbq", "costillar",
+                    "mac and cheese", "chicken wings", "brisket",
+                    "coleslaw", "corn dog", "brownie"],
+
+    # Mediterránea fusión
+    "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
+                     "couscous marroqui", "tajine", "merguez", "harira"],
 }
 
 SINONIMOS_COCINA = {
