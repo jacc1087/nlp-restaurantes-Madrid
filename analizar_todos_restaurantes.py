@@ -284,10 +284,10 @@ PLATOS_POR_COCINA = {
                    "risotto","tagliatelle","pappardelle","gnocchi","cannoli","arancini",
                    "burrata","stracciatella","tiramisu","tiramisú","lasana","lasaña",
                    "pasta","pizza","bruschetta","focaccia"],
-    "española":   ["cocido madrileño","cocido","callos","croquetas","tortilla",
-                   "rabo de toro","oreja","patatas bravas","gazpacho","salmorejo",
-                   "paella","jamon","chorizo","pisto","huevos rotos","migas",
-                   "boquerones","gambas al ajillo"],
+    "madrileña":  ["cocido madrileño","cocido","callos","callos madrileños",
+                   "bocadillo calamares","soldaditos pavia","migas"],
+    "madrileña":  ["cocido madrileño","cocido","callos","callos madrileños",
+                   "bocadillo calamares","soldaditos pavia","migas"],
     "peruana":    ["lomo saltado","lomo salteado","causa","anticuchos","chaufa",
                    "aji de gallina","leche de tigre","tiradito","ceviche",
                    "pachamanquero","chicharron peruano"],
@@ -350,7 +350,19 @@ def _detectar_cocina_restaurante(todos_platos_str: str) -> str:
     mejor_cocina = ''
     mejor_score = 0
 
-    for cocina, platos_def in PLATOS_POR_COCINA.items():
+    # Orden de prioridad: cocinas regionales antes que "española" genérica
+    ORDEN_PRIORIDAD = [
+        'gallega', 'asturiana', 'vasca', 'madrileña',
+        'peruana', 'italiana', 'japonesa', 'india', 'mexicana',
+        'venezolana', 'colombiana', 'china', 'tailandesa',
+        'francesa', 'griega', 'arabe', 'americana', 'madrileña',
+    ]
+    cocinas_ordenadas = sorted(
+        PLATOS_POR_COCINA.items(),
+        key=lambda x: ORDEN_PRIORIDAD.index(x[0]) if x[0] in ORDEN_PRIORIDAD else 99
+    )
+
+    for cocina, platos_def in cocinas_ordenadas:
         matches = []
         menciones_cocina = 0
         for plato_def in platos_def:

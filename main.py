@@ -481,10 +481,7 @@ COCINAS = {
                     "ceviche pacha", "pachamanquero", "suspiro limeno",
                     "leche de tigre", "chicharron peruano"],
 
-    # Española clásica
-    "española":    ["paella", "cocido madrileno", "fabada", "gazpacho", "salmorejo",
-                    "patatas bravas", "croquetas jamon", "tortilla española", "pisto manchego",
-                    "rabo de toro", "chuleton", "callos madrilenos", "oreja"],
+
 
     # Asturiana: platos muy específicos
     "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
@@ -553,7 +550,9 @@ SINONIMOS_COCINA = {
     "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa",
     "indio": "india", "india": "india", "hindu": "india",
     "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española",
+    # Madrileña
+    "madrileno": "madrileña", "madrilena": "madrileña",
+    "madrileño": "madrileña", "madrileña": "madrileña",
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
     "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
     "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
@@ -726,9 +725,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                         "som tam", "larb", "mango sticky rice", "khao pad"],
         "americana":   ["smash burger", "pulled pork", "costillas bbq", "mac and cheese",
                         "chicken wings", "brisket", "coleslaw", "brownie", "costillar"],
-        "española":    ["cocido madrileno", "fabada", "croquetas", "tortilla", "rabo de toro",
-                        "callos", "oreja", "patatas bravas", "gazpacho", "salmorejo", "paella",
-                        "jamon", "chorizo", "pisto"],
+        "madrileña":   ["cocido madrileño", "cocido madrileno", "cocido", "callos", "callos madrileños",
+                        "bocadillo calamares", "soldaditos pavia", "migas"],
+
     }
 
     platos_def = PLATOS_COCINA.get(cocina, [])
