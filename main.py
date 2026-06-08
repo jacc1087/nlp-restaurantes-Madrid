@@ -701,8 +701,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro", "marmitako",
                         "kokotxas", "txakoli", "chipirones en su tinta", "merluza en salsa verde",
                         "bacalao", "merluza", "anchoas"],
-        "asturiana":   ["cachopo", "fabada", "oricios", "pote asturiano", "cabrales",
-                        "casadielles", "sidra"],
+        "asturiana":   ["cachopo", "cachopu", "fabada", "fabada asturiana", "oricios",
+                        "pote asturiano", "cabrales", "casadielles", "sidra",
+                        "verdinas", "compango", "frixuelos", "tortos"],
         "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal", "tandoori",
                         "chapati", "pakora", "butter chicken", "palak paneer", "chana masala",
                         "lassi", "dosa", "saag"],
@@ -1098,12 +1099,16 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             return restaurantes, meta
 
     # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
-    # Si se pide una cocina específica y un restaurante no tiene >= 4 platos de esa
-    # cocina (_score_match == 0), se excluye sin excepción. No se rellena con
-    # restaurantes genéricos: si no hay ninguno, se devuelve lista vacía.
     if cocina:
+        # Bonus: restaurantes con cocina_detectada coincidente suben en score
+        if "cocina_detectada" in df_filtrado.columns:
+            df_filtrado["_score_match"] = df_filtrado.apply(
+                lambda r: r["_score_match"] * 1.5
+                if str(r.get("cocina_detectada","")).lower() == cocina.lower()
+                else r["_score_match"],
+                axis=1
+            )
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-        # Si tras el filtro no queda ningún restaurante → devolver vacío inmediatamente
         if df_filtrado.empty:
             return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
 

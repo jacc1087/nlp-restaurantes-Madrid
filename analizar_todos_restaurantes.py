@@ -162,14 +162,19 @@ PLATOS_WHITELIST = {
     'buñuelos','bunuelos','buñuelos de bacalao',
     'paella de mariscos','paella de marisco',
     # Platos asturianos y otras incorporaciones detectadas en producción
-    'cachopo','cachopu','cachopo de ternera','cachopo relleno',
-    'fabada asturiana','pote asturiano','oricios',
-    'tortos','torto','frixuelos',
+    'cachopo','cachopu','cachopo de ternera','cachopo relleno','cachopo casero',
+    'fabada asturiana','fabada','pote asturiano','pote gallego','oricios',
+    'tortos','torto','frixuelos','verdinas','verdinas con marisco',
+    'compango','cabrales','queso cabrales','afuega','gamonedo',
+    'sidra asturiana','botillo','chosco','cecina asturiana',
+    'merluza asturiana','pixín','pixin','centollo asturiano',
     # Platos vascos adicionales
     'pintxos','pintxo','gilda','pil pil',
     # Platos madrileños
+    'cocido madrileno','cocido madrileño','cocido','cocido completo',
+    'callos madrilenos','callos a la madrilena','huevos rotos','huevos estrellados',
     'bocadillo de calamares','bocata de calamar','soldaditos de pavía',
-    'patatas a la importancia','huevos estrellados',
+    'patatas a la importancia','migas',
     # Postres y dulces adicionales
     'arroz con leche','leche frita','bizcocho','magdalenas',
     'torrijas','rosquillas','buñuelos de viento',
@@ -178,10 +183,17 @@ PLATOS_WHITELIST = {
     'entraña','tira de asado','costillar',
     # Mariscos y pescados adicionales
     'zamburiñas','nécoras','centollo','buey de mar',
-    'lomos de bacalao','boquerones en vinagre','anchoas en salazón',
+    'boquerones','boquerones en vinagre','boquerones fritos','boquerones aceite',
+    'gambas al ajillo','gambas plancha','gambas pil pil',
+    'lomos de bacalao','anchoas en salazón','anchoas',
+    'carabineros','cigalas','ostras','navajas plancha',
+    # Platos con adjetivo geográfico que el extractor perdia
+    'cocido madrileno','fabada asturiana','lacon con grelos','caldo gallego',
+    'bacalao vizcaina','bacalao al pil pil','merluza vasca',
+    'pinchos','pintxo','pinchos morunos',
     # Bebidas y cócteles adicionales
-    'vermut','vermú','rebujito','tinto de verano',
-    'agua de valencia','txakoli',
+    'vermut','vermu','vermú','rebujito','tinto de verano',
+    'agua de valencia','txakoli','sidra',
 }
 
 # ── Falsos positivos confirmados — se rechazan SIEMPRE, ignorando la caché ──
@@ -254,6 +266,127 @@ PATRONES_NO_PLATO = re.compile(
     r'|'
     r'(mente|ísimo|ísima|ísimos|ísimas|ción|sión)$'
 )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETECCIÓN DE COCINA POR PLATOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+PLATOS_POR_COCINA = {
+    "gallega":    ["pulpo","empanada","percebes","navajas","vieiras","berberechos",
+                   "zamburinas","zamburiñas","caldo gallego","lacon","grelos","padron",
+                   "filloas","tetilla","pote gallego","zorza","ribeiro","albarino"],
+    "asturiana":  ["cachopo","fabada","oricios","pote asturiano","cabrales",
+                   "casadielles","sidra","tortos","frixuelos","callos asturianos"],
+    "vasca":      ["pintxos","pintxo","gilda","bacalao pil pil","txangurro","marmitako",
+                   "kokotxas","txakoli","chipirones en su tinta","merluza en salsa verde",
+                   "bacalao","merluza","anchoas","pinchos"],
+    "italiana":   ["carbonara","cacio e pepe","amatriciana","ossobuco","panna cotta",
+                   "risotto","tagliatelle","pappardelle","gnocchi","cannoli","arancini",
+                   "burrata","stracciatella","tiramisu","tiramisú","lasana","lasaña",
+                   "pasta","pizza","bruschetta","focaccia"],
+    "española":   ["cocido madrileño","cocido","callos","croquetas","tortilla",
+                   "rabo de toro","oreja","patatas bravas","gazpacho","salmorejo",
+                   "paella","jamon","chorizo","pisto","huevos rotos","migas",
+                   "boquerones","gambas al ajillo"],
+    "peruana":    ["lomo saltado","lomo salteado","causa","anticuchos","chaufa",
+                   "aji de gallina","leche de tigre","tiradito","ceviche",
+                   "pachamanquero","chicharron peruano"],
+    "japonesa":   ["ramen","sushi","sashimi","gyozas","tempura","udon","mochi",
+                   "katsu","takoyaki","tonkatsu","nigiri","yakitori","edamame","miso","soba"],
+    "india":      ["tikka masala","biryani","naan","samosa","korma","dal","tandoori",
+                   "chapati","pakora","butter chicken","palak paneer","chana masala",
+                   "lassi","dosa","saag"],
+    "mexicana":   ["burrito","quesadilla","fajitas","guacamole","enchilada","pozole",
+                   "carnitas","mole","tacos","chilaquiles","chile relleno","tamales",
+                   "tostadas","nachos"],
+    "venezolana": ["arepa","arepas","pabellon criollo","cachapa","hallaca","pernil",
+                   "caraotas","tequeños","mandocas","chicha"],
+    "colombiana": ["bandeja paisa","ajiaco","sancocho","changua","lechona"],
+    "china":      ["dim sum","wonton","pato pekin","chow mein","baozi","mapo tofu",
+                   "dumplings","spring roll"],
+    "tailandesa": ["pad thai","tom yum","massaman","curry verde","curry rojo","satay",
+                   "som tam","larb","mango sticky rice"],
+    "francesa":   ["foie gras","confit de pato","bouillabaisse","coq au vin","escargots",
+                   "crepe","souffle","cassoulet","magret","ratatouille","tartare"],
+    "griega":     ["gyros","souvlaki","moussaka","spanakopita","tzatziki","baklava",
+                   "dolmades","kleftiko","taramasalata"],
+    "arabe":      ["shawarma","falafel","tabule","baba ganoush","labneh","shakshuka",
+                   "kibbeh","fattoush","couscous","hummus","kebab"],
+    "americana":  ["smash burger","pulled pork","costillas bbq","mac and cheese",
+                   "chicken wings","brisket","coleslaw","brownie","costillar"],
+}
+
+MIN_PLATOS_COCINA_DETECCION = 3   # mínimo de platos distintos para asignar cocina
+MIN_MENCIONES_PLATO_DETECCION = 2  # cada plato debe aparecer en >=2 reseñas distintas
+MIN_PROPORCION_COCINA = 0.30       # platos de esa cocina >= 30% del total de menciones
+
+def _detectar_cocina_restaurante(todos_platos_str: str) -> str:
+    """
+    Analiza todos_platos de un restaurante y devuelve la cocina predominante.
+    Devuelve '' si no hay suficiente evidencia.
+    """
+    import unicodedata as _ud, re as _re, math as _math
+    def _n(s):
+        s = s.lower()
+        s = _ud.normalize('NFD', s)
+        return ''.join(c for c in s if _ud.category(c) != 'Mn')
+
+    if not todos_platos_str or str(todos_platos_str) in ('', 'nan'):
+        return ''
+
+    # Parsear todos_platos: "pulpo(9), lomo bajo(5)" → {nombre: menciones}
+    platos_rest = {}
+    for parte in str(todos_platos_str).split(','):
+        parte = parte.strip()
+        m = _re.match(r'^(.+?)\((\d+)\)$', parte)
+        if m:
+            platos_rest[_n(m.group(1).strip())] = int(m.group(2))
+
+    if not platos_rest:
+        return ''
+
+    total_menciones = sum(platos_rest.values())
+
+    mejor_cocina = ''
+    mejor_score = 0
+
+    for cocina, platos_def in PLATOS_POR_COCINA.items():
+        matches = []
+        menciones_cocina = 0
+        for plato_def in platos_def:
+            plato_n = _n(plato_def)
+            for nombre_rest, menciones in platos_rest.items():
+                if plato_n in nombre_rest or nombre_rest in plato_n:
+                    if menciones >= MIN_MENCIONES_PLATO_DETECCION:
+                        matches.append((plato_def, menciones))
+                        menciones_cocina += menciones
+                    break
+
+        # Excepción asturiana: cachopo con ≥5 menciones es suficiente por sí solo
+        if len(matches) < MIN_PLATOS_COCINA_DETECCION:
+            if cocina == 'asturiana':
+                plato_estrella = any(_n(p) in ('cachopo','cachopu') and m >= 5
+                                     for p, m in matches)
+                if not plato_estrella:
+                    continue
+            else:
+                continue
+
+        proporcion = menciones_cocina / total_menciones if total_menciones > 0 else 0
+        if proporcion < MIN_PROPORCION_COCINA:
+            # Excepción asturiana: si cachopo domina, relajar proporción
+            if cocina == 'asturiana' and any(_n(p) == 'cachopo' and m >= 5 for p, m in matches):
+                pass  # permitir
+            else:
+                continue
+
+        score = sum(2.0 + _math.log2(m) for _, m in matches)
+        if score > mejor_score:
+            mejor_score = score
+            mejor_cocina = cocina
+
+    return mejor_cocina
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cache persistente
@@ -928,77 +1061,28 @@ def extraer_platos(serie_reviews, n=5, nombre_restaurante=''):
             print(f"       Rechazados: {rechazados}")
     return platos_norm
 
-_STOP_PERSONAL = {
-    'el','la','los','las','un','una','de','del','al','en','con','por','que',
-    'nos','les','fue','es','era','son','muy','todo','bien','mal','hay','han',
-    'comida','servicio','lugar','sitio','restaurante','mesa','plato','trato',
-    'precio','ambiente','terraza','carta','vino','agua','pan','cafe','postre',
-    'excelente','bueno','buena','malo','mala','genial','increible','perfecto',
-    'impecable','fantastico','amable','atento','atenta','profesional','maravilloso',
-    'siempre','nunca','tambien','ademas','mucho','poco','nada','algo',
-    'personal','equipo','staff','gente','chico','chica','senor','senora',
-    'madrid','calle','verdad','parte','lado','vez','veces','dia','noche',
-    'tarde','atencion','experiencia','visita','reserva','encanto','rapido',
-    'recomendable','recomendado','volveremos','volvere','volveria','repetir',
-    'seguro','duda','pronto','gracias','especialmente','destacar','estupendo',
-    'espectacular','inmejorable','fenomenal','extraordinario','sobresaliente',
-    'excepcional','agradable','simpatico','simpatica','amables','atentos',
-    'educados','correcto','todos','algunas','algunos','este','esta','estos',
-    'aqui','alli','cuando','como','para','mas','menos','tan','tanto','igual',
-    'camarero','camarera','chef','cocinero','maitre','gerente','encargado',
-    'dueno','duena','propietario','socio','sala','cocina','local','negocio',
-    'hora','minuto','momento','primera','segunda','ultima','proxima',
-    'sabor','textura','calidad','cantidad','presentacion',
-    'sushi','pizza','vinos','cerveza','mariscos','tapas','pasta','arabe',
-    'asiatica','cilantro','atendio','recibido','encantador','encantadora',
-    'vermut','amor','guerrero','ella','ellos','ellas','nosotros','vosotros',
-    'tod','mare','pero','sus','sin','hoy','sale','tampoco','nuestro','resulto',
-    'extraordinar','platos','volvemos','super','rapidos','atentas',
-}
-
-_PATRONES_PERSONAL = [
-    r'gracias\s+a\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})(?:\s+y\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12}))?',
-    r'de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})\s+(?:fue|estuvo)\s+(?:excelente|impecable|genial|increible|fantastico|perfecto|excepcional|maravilloso|sobresaliente|extraordinario)',
-    r'([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})\s+(?:fue|es|estuvo)\s+(?:muy\s+|super\s+)?(?:amable|atento|atenta|profesional|excepcional|genial|increible|fantastico|impecable|simpatico|simpatica|encantador|encantadora)',
-    r'(?:el\s+camarero|la\s+camarera|el\s+maitre|el\s+chef|el\s+sommelier|el\s+encargado|la\s+encargada|el\s+gerente)\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-    r'(?:recomendaciones?|consejos?|sugerencias?)\s+de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-    r'nos\s+(?:atendio|ayudo|explico|recomendo|asesoro|recibio)\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-    r'(?:destacar|mencionar|agradecer|felicitar)\s+a\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-    r'atendidos?\s+por\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-    r'(?:labor|trabajo|profesionalidad|dedicacion|amabilidad)\s+de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
-]
-
-def _norm_personal(s):
-    import unicodedata as _ud
-    s = s.lower()
-    s = _ud.normalize('NFD', s)
-    return ''.join(c for c in s if _ud.category(c) != 'Mn')
-
-def extraer_personal(serie_reviews, platos_set=None, n_resenas=90, n=3):
-    """
-    Extrae nombres de personal destacado usando patrones de mencion directa.
-    Sin Gemini — determinista y sin coste de tokens.
-    Solo cuenta un nombre si aparece en >= 2 resenas distintas.
-    """
-    MIN_RESENAS_NOMBRE = 2
-    contador = Counter()
-    for resena in serie_reviews:
-        texto = _norm_personal(str(resena or ''))
-        encontrados_esta_resena = set()
-        for patron in _PATRONES_PERSONAL:
-            for match in re.finditer(patron, texto):
-                for grupo in match.groups():
-                    if grupo:
-                        nombre = grupo.strip()
-                        if (nombre not in _STOP_PERSONAL
-                                and len(nombre) >= 3
-                                and len(nombre) <= 12
-                                and nombre.isalpha()):
-                            encontrados_esta_resena.add(nombre)
-        for nombre in encontrados_esta_resena:
-            contador[nombre] += 1
-    return [(nombre, count) for nombre, count in contador.most_common(n * 2)
-            if count >= MIN_RESENAS_NOMBRE][:n]
+def extraer_personal(serie_reviews, platos_set, n_resenas, n=5):
+    freq_total   = Counter()
+    freq_resenas = Counter()
+    for r in serie_reviews:
+        texto    = limpiar(str(r))
+        palabras = re.findall(r"[a-záéíóúüñ]{4,}", texto)
+        tokens_set = set()
+        for t in palabras:
+            if t not in STOP_ES and t not in NO_PLATOS and t not in platos_set:
+                freq_total[t] += 1
+                tokens_set.add(t)
+        for t in tokens_set:
+            freq_resenas[t] += 1
+    candidatos = [
+        (t, freq_total[t]) for t in freq_total
+        if freq_resenas.get(t,0) >= 2
+        and freq_resenas.get(t,0) <= n_resenas * 0.40
+    ]
+    candidatos.sort(key=lambda x: -x[1])
+    nombres = clasificar_nombres([t for t,_ in candidatos[:30]])
+    personal = [(t,c) for t,c in candidatos if t in nombres]
+    return personal[:n]
 
 # ─────────────────────────────────────────────
 # ANÁLISIS POR RESTAURANTE
@@ -1053,20 +1137,63 @@ def analizar_restaurante(df_r):
     criterios_log = ', '.join(f'{k}={"✓" if v else "✗"}' for k,v in criterios.items())
     print(f"    criterios: {criterios_log}")
 
-    # Servicio destacado — sin Gemini, siempre activo
-    personal = extraer_personal(df_r['Review'].tolist(), platos_set, n)
-    personal_str_nuevo = ', '.join([f"{t.capitalize()}({c})" for t, c in personal])
+    # Servicio destacado — extraer nombres del personal de las reseñas
+    # Se hace siempre (también en MODO_ECONOMICO) porque reutiliza clasificar_nombres
+    # que ya tiene caché y no cuesta tokens para nombres ya conocidos
+    if not MODO_ECONOMICO:
+        personal    = extraer_personal(df_r['Review'], platos_set, n)
+        personal_str_nuevo = ', '.join([f"{t.capitalize()}({c})" for t,c in personal])
+    else:
+        personal_str_nuevo = None  # se asigna abajo desde CSV previo
 
     # Platos
     # Una sola llamada a Gemini (n=15) — top5 es simplemente los primeros 5
     platos_todos = extraer_platos(df_r['Review'], n=15, nombre_restaurante=nombre)
     platos_todos = _dedup_local(platos_todos)[:15]  # fusionar variantes localmente
+
+    # ── Recuperación de platos de whitelist con alta frecuencia no detectados ──
+    # Segundo barrido: buscar platos de PLATOS_WHITELIST que aparezcan en >= 3
+    # reseñas distintas pero que el extractor de bigramas haya perdido
+    # (ej: "cocido madrileño" porque "madrileño" está en NO_PLATOS)
+    MIN_MENCIONES_RECUPERACION = 3
+    platos_ya_detectados = {limpiar(p) for p, _ in platos_todos}
+    textos_resenas = df_r['Review'].astype(str).tolist()
+    for plato_wl in sorted(PLATOS_WHITELIST):
+        plato_limpio = limpiar(plato_wl)
+        # Saltar si ya está detectado o es muy genérico (< 4 chars)
+        if len(plato_limpio) < 4:
+            continue
+        if any(plato_limpio in det or det in plato_limpio
+               for det in platos_ya_detectados):
+            continue
+        # Contar menciones en reseñas distintas
+        menciones = sum(1 for r in textos_resenas if plato_limpio in limpiar(str(r)))
+        if menciones >= MIN_MENCIONES_RECUPERACION:
+            platos_todos.append((plato_wl, menciones))
+            platos_ya_detectados.add(plato_limpio)
+    # Re-ordenar por menciones
+    platos_todos.sort(key=lambda x: -x[1])
+    platos_todos = platos_todos[:15]
+
     platos_top   = platos_todos[:5]
     platos_str   = ', '.join([f"{p}({c})" for p,c in platos_top])
     todos_str    = ', '.join([f"{p}({c})" for p,c in platos_todos])
     platos_set   = {p for p,_ in platos_todos}
 
-    personal_str = personal_str_nuevo or ''
+    # Personal — en modo económico reusar del CSV previo
+    if MODO_ECONOMICO:
+        personal_str = ''
+        if os.path.exists(OUTPUT_CSV):
+            try:
+                _prev = pd.read_csv(OUTPUT_CSV)
+                _fila_prev = _prev[_prev['id_restaurante'] == rid]
+                if not _fila_prev.empty and 'personal_destacado' in _prev.columns:
+                    personal_str = str(_fila_prev['personal_destacado'].iloc[0])
+                    if personal_str == 'nan': personal_str = ''
+            except Exception:
+                pass
+    else:
+        personal_str = personal_str_nuevo or ''
 
     # Frases de servicio — extraer fragmentos positivos de reseñas que mencionan
     # al personal por nombre o elogian el servicio (sin coste Gemini)
@@ -1123,6 +1250,7 @@ def analizar_restaurante(df_r):
         'todos_platos':         todos_str,
         'personal_destacado':   personal_str,
         'terminos_tfidf':       tfidf_str,
+        'cocina_detectada':     _detectar_cocina_restaurante(todos_str),
     }
 
     df_r_out = df_r[['Id_Restaurante','Restaurante','Id_review','Review',
@@ -1355,5 +1483,88 @@ for i, rid in enumerate(ids_pendientes, 1):
         import traceback
         print(f"    ✗ Error: {e}")
         traceback.print_exc()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST-PROCESADO: recuperación de platos y detección de cocina para TODOS
+# Se aplica sobre el CSV final ya generado, sin reprocesar BERT
+# ─────────────────────────────────────────────────────────────────────────────
+print("\nPost-procesando: recuperación de platos whitelist y cocina_detectada...")
+
+df_final = pd.read_csv(OUTPUT_CSV)
+df_resenas_cargadas = pd.read_csv(OUTPUT_RESENAS) if os.path.exists(OUTPUT_RESENAS) else df.rename(columns={'Review':'Review'})
+
+MIN_MENCIONES_RECUPERACION = 3
+actualizados_platos = 0
+actualizados_cocina = 0
+
+for idx, row in df_final.iterrows():
+    rid = int(row['id_restaurante'])
+    nombre_r = str(row['nombre'])
+
+    # Reseñas de este restaurante
+    try:
+        resenas_r = df_resenas_cargadas[df_resenas_cargadas['Id_Restaurante'] == rid]['Review'].astype(str).tolist()
+    except Exception:
+        resenas_r = df[df['Id_Restaurante'] == rid]['Review'].astype(str).tolist()
+
+    if not resenas_r:
+        continue
+
+    # Platos ya detectados
+    todos_str = str(row.get('todos_platos', '') or '')
+    platos_actuales = {}
+    for parte in todos_str.split(','):
+        m = re.match(r'^(.+?)\((\d+)\)$', parte.strip())
+        if m:
+            platos_actuales[limpiar(m.group(1).strip())] = int(m.group(2))
+
+    # Segundo barrido: buscar platos de whitelist no detectados
+    nuevos = []
+    for plato_wl in sorted(PLATOS_WHITELIST):
+        plato_limpio = limpiar(plato_wl)
+        if len(plato_limpio) < 4:
+            continue
+        # Ya está detectado (exact o parcial)
+        if any(plato_limpio in det or det in plato_limpio
+               for det in platos_actuales):
+            continue
+        menciones = sum(1 for r in resenas_r if plato_limpio in limpiar(str(r)))
+        if menciones >= MIN_MENCIONES_RECUPERACION:
+            nuevos.append((plato_wl, menciones))
+            platos_actuales[plato_limpio] = menciones  # evitar duplicados
+
+    if nuevos:
+        nuevos.sort(key=lambda x: -x[1])
+        nuevos_str = ', '.join(f"{p}({c})" for p, c in nuevos)
+        if todos_str and todos_str != 'nan':
+            df_final.at[idx, 'todos_platos'] = nuevos_str + ', ' + todos_str
+        else:
+            df_final.at[idx, 'todos_platos'] = nuevos_str
+        todos_str = df_final.at[idx, 'todos_platos']
+        actualizados_platos += 1
+        print(f"  [{rid}] {nombre_r}: +{[f'{p}({c})' for p,c in nuevos]}")
+
+    # Detectar cocina
+    cocina = _detectar_cocina_restaurante(todos_str)
+    current = str(row.get('cocina_detectada', '') or '')
+    if cocina and current in ('', 'nan'):
+        df_final.at[idx, 'cocina_detectada'] = cocina
+        actualizados_cocina += 1
+    elif not cocina and current in ('', 'nan'):
+        df_final.at[idx, 'cocina_detectada'] = ''
+
+    # personal_destacado: aplicar si está vacío
+    personal_actual = str(row.get('personal_destacado', '') or '')
+    if personal_actual in ('', 'nan'):
+        personal = extraer_personal(resenas_r, platos_set=set(platos_actuales.keys()), n_resenas=len(resenas_r), n=3)
+        if personal:
+            df_final.at[idx, 'personal_destacado'] = ', '.join(
+                f"{n.capitalize()}({c})" for n, c in personal
+            )
+
+df_final.to_csv(OUTPUT_CSV, index=False)
+print(f"  Platos recuperados en {actualizados_platos} restaurantes")
+print(f"  Cocina detectada en {actualizados_cocina} restaurantes")
+print(f"  CSV actualizado: {OUTPUT_CSV}")
 
 print(f"\n{'='*60}\n¡Completado!\n  → {OUTPUT_CSV}\n  → {OUTPUT_RESENAS}")
