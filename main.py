@@ -854,44 +854,34 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Score final combinado ──────────────────────────────────────
     if zona_coords:
-        # Con zona: ordenar por distancia real, calidad solo como desempate
-        # Se redondea la distancia a intervalos de 0.5 km para que la calidad
-        # desempate entre restaurantes igualmente cercanos
         df["_dist_bucket"] = (df["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
         df["_score_final"] = (
-            -df["_dist_bucket"] * 10 +          # primero los más cercanos
-            df["_score_calidad"] * 1             # desempate por calidad dentro del mismo bucket
+            -df["_dist_bucket"] * 10 +
+            df["_score_calidad"] * 1
         )
     elif cocina or df["_score_match"].max() > 4:
-        # Con match de texto/cocina: 50% match + 50% calidad
         df["_score_final"] = (
             (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.50 +
             df["_score_calidad"] * 0.50
         )
     else:
-        # Sin match: solo calidad
         df["_score_final"] = df["_score_calidad"]
 
     # ── Filtrar por criterios detectados ──────────────────────────
     df_filtrado = df.copy()
     for criterio in criterios:
         mascara = df_filtrado.apply(lambda r: _pasa_criterio(r, criterio), axis=1)
-        if mascara.sum() > 0:  # Solo filtrar si hay resultados
+        if mascara.sum() > 0:
             df_filtrado = df_filtrado[mascara]
 
-    # ── Si con filtros quedan pocos, usar sin filtros ──────────────
-    if len(df_filtrado) < 3 and len(criterios) > 0:
-        df_filtrado = df.copy()
-
-    # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
+    # ── Filtrado estricto: búsqueda específica nunca rellena con genéricos ────
     if cocina:
-        # Solo incluir restaurantes que superaron el umbral de platos (score > 0)
-        df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
-        if len(df_con_match) >= 3:
-            df_filtrado = df_con_match
-        elif len(df_con_match) > 0:
-            # Si hay menos de 3 con score > 0, los mostramos igualmente (son los únicos relevantes)
-            df_filtrado = df_con_match
+        # Tipo de cocina: solo los que cumplen mínimo de platos
+        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
+    elif not zona_coords and df["_score_match"].max() > 4:
+        # Plato o término específico: solo los que tienen match real
+        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
+    # Zona y búsqueda genérica: sin filtro de score
 
     # ── Filtrar por distancia máxima si hay zona ─────────────────
     if zona_coords and "_dist_zona" in df_filtrado.columns:
