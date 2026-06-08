@@ -60,7 +60,7 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
     prompt = (
         "Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA.\n\n"
         "EJEMPLOS (entrada → salida):\n"
-        "quiero comer comida gallega → cocina gallega\n"
+        "quiero comer comida gallega → cocina gallega\n""quiero un restaurante gallego → cocina gallega\n""un buen restaurante italiano → cocina italiana\n""me apetece un chino → cocina china\n"
         "me apetece un italiano → cocina italiana\n"
         "un japonés auténtico → cocina japonesa\n"
         "quiero comer croquetas → croquetas\n"
@@ -1016,9 +1016,6 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     if df_global is None:
         return [], {}
 
-    # Normalizar consulta con Gemini antes de procesar
-    consulta = _normalizar_consulta_gemini(consulta)
-
     df = df_global.copy()
     consulta_norm = _norm(consulta)
     # Filtrar tokens que no aportan información de búsqueda
@@ -1037,6 +1034,19 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     zona_coords = _detectar_zona(consulta)
     criterios = _detectar_criterios(consulta)
     famosos = _detectar_famosos(consulta)
+
+    # Si no se detecta nada concreto, usar Gemini para interpretar
+    tokens_tmp = [t for t in __import__('re').split(r'[\s,.()/\-]+', consulta_norm)
+                  if len(t) >= 3 and t not in TOKENS_BASURA]
+    if not cocina and not criterios and not famosos and not tokens_tmp:
+        consulta_norm_gemini = _normalizar_consulta_gemini(consulta)
+        if consulta_norm_gemini != consulta:
+            consulta = consulta_norm_gemini
+            consulta_norm = _norm(consulta)
+            cocina = _detectar_cocina(consulta)
+            zona_coords = zona_coords or _detectar_zona(consulta)
+            criterios = _detectar_criterios(consulta)
+            famosos = _detectar_famosos(consulta)
 
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
