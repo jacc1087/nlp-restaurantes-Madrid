@@ -495,6 +495,54 @@ INTENCIONES_CRITERIO = {
 }
 
 
+# IDs de restaurantes icónicos/famosos de Madrid — selección manual por notoriedad
+# Combina: estrellas Michelin, alta popularidad en Google, referentes culturales
+RESTAURANTES_ICONICOS = {
+    70,   # DiverXO
+    40,   # DSTAGE
+    128,  # Coque
+    130,  # StreetXO
+    132,  # Corral de la Morería
+    125,  # Dans Le Noir ?
+    95,   # Bacira
+    75,   # sr.Ito
+    62,   # La Tasqueria de Javi Estevez
+    156,  # Juana La Loca
+    24,   # Rosi La Loca
+    74,   # Bestial By Rosi La Loca
+    85,   # Angelita Madrid
+    131,  # La Castela
+    103,  # Casa Benigna
+    1,    # Los Montes de Galicia
+    9,    # Inclán Brutal Bar
+    6,    # Tabernas El Sur
+    86,   # Casa Lucas
+    154,  # Dantxari
+    155,  # Casa Toni
+}
+
+PALABRAS_FAMOSOS = [
+    "famoso", "famosa", "famosos", "famosas",
+    "conocido", "conocida", "conocidos", "conocidas",
+    "popular", "populares",
+    "iconico", "iconica", "iconicos",
+    "referente", "referentes",
+    "top madrid", "lo mejor de madrid", "imprescindible", "imprescindibles",
+    "estrella michelin", "michelin", "con estrella",
+    "de moda", "trendy", "instagram",
+    "recomendado", "muy recomendado",
+    "especial", "unico", "unica",
+    "gastro", "gastronomico", "gastronomica",
+    "experiencia", "experiencia unica",
+    "must", "must do", "hay que ir",
+]
+
+def _detectar_famosos(consulta: str) -> bool:
+    """Detecta si el usuario busca restaurantes famosos/icónicos/conocidos."""
+    c = _norm(consulta)
+    return any(p in c for p in PALABRAS_FAMOSOS)
+
+
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
     padded = " " + c + " "
@@ -879,6 +927,7 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     cocina = _detectar_cocina(consulta)
     zona_coords = _detectar_zona(consulta)
     criterios = _detectar_criterios(consulta)
+    famosos = _detectar_famosos(consulta)
 
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
@@ -911,6 +960,23 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Filtrar primero, luego calcular score final ────────────────
     df_filtrado = df.copy()
+
+    # FILTRO POR FAMOSOS: si busca sitios conocidos/icónicos, filtrar por lista curada
+    if famosos and not cocina:
+        # IDs que siempre aparecen primero por ser landmarks absolutos de Madrid
+        ICONICOS_PRIMERO = [70, 40, 128, 130, 132, 125]  # DiverXO, DSTAGE, Coque, StreetXO, Corral Morería, Dans Le Noir
+        ids_int = df["id_restaurante"].astype(int)
+        mask = ids_int.isin(RESTAURANTES_ICONICOS)
+        if mask.sum() > 0:
+            df_famosos = df[mask].copy()
+            df_famosos["_score_final"] = df_famosos.apply(_score_calidad, axis=1)
+            # Los landmarks fijos van siempre primero con score extra
+            df_famosos["_es_landmark"] = ids_int[mask].isin(ICONICOS_PRIMERO).astype(int) * 100
+            df_famosos["_score_final"] = df_famosos["_score_final"] + df_famosos["_es_landmark"]
+            df_top = df_famosos.sort_values("_score_final", ascending=False).head(8)
+            restaurantes = [_fila_a_restaurante(row) for _, row in df_top.iterrows()]
+            meta = {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": len(df_famosos), "famosos": True, "tokens": tokens}
+            return restaurantes, meta
 
     # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
     # Si se pide una cocina específica y un restaurante no tiene >= 4 platos de esa
@@ -1042,9 +1108,36 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     cocina    = meta.get("cocina")
     zona      = meta.get("zona")
     criterios = meta.get("criterios", [])
+    famosos   = meta.get("famosos", False)
 
     # Intro contextual
     intro_parts = []
+    if famosos:
+        intro = "Aquí tienes algunos de los restaurantes más conocidos e icónicos de Madrid:"
+        lineas = [intro, ""]
+        # reutilizar el mismo bucle de formato
+        for r in restaurantes:
+            nombre  = r["nombre"]
+            val     = r["valoracion"]
+            pct     = r.get("_pct_positivo", 0)
+            dist    = r.get("distancia_km")
+            platos  = r.get("platos_destacados", [])
+            resumen = r.get("resumen", "")
+            lineas.append(f"**{nombre}**")
+            meta_linea = f"Valoración: {val}"
+            if pct:
+                meta_linea += f" · {pct:.0f}% reseñas positivas"
+            if r.get("rango_precio"):
+                from_mapa = {"euro": "€", "euro euro": "€€", "euro euro euro": "€€€", "euro euro euro euro": "€€€€"}
+                meta_linea += f" · {from_mapa.get(r['rango_precio'], r['rango_precio'])}"
+            lineas.append(meta_linea)
+            if resumen:
+                lineas.append(resumen[:120] + ("..." if len(resumen) > 120 else ""))
+            if platos:
+                lineas.append(f"🍽️ Platos: {', '.join(platos[:4])}")
+            lineas.append("")
+        return "\n".join(lineas).strip()
+
     if cocina:
         intro_parts.append(f"cocina {cocina}")
     if criterios:
