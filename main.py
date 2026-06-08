@@ -621,11 +621,23 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         return 0.0
 
     # Filtro de relevancia: los platos deben ser reales, no menciones anecdóticas.
-    # Pasa si: al menos 2 platos con >1 mención, O un plato estrella con >5 menciones
+    # Pasa si: al menos 2 platos con >1 mención, O un plato estrella con >8 menciones
     con_menciones = sum(1 for m in matches if m["menciones"] > 1)
     plato_estrella = any(m["menciones"] > 8 for m in matches)
     if con_menciones < 2 and not plato_estrella:
         return 0.0
+
+    # Filtro de especialización: las menciones de platos de esta cocina deben representar
+    # al menos el 35% del total de menciones del restaurante.
+    # Evita que restaurantes fusión con platos de muchas cocinas aparezcan como especialistas.
+    total_menciones_restaurante = sum(
+        p["menciones"] for p in platos_lista
+    )
+    menciones_cocina = sum(m["menciones"] for m in matches)
+    if total_menciones_restaurante > 0:
+        proporcion = menciones_cocina / total_menciones_restaurante
+        if proporcion < 0.35:
+            return 0.0
 
     return round(score, 2)
 
