@@ -852,36 +852,35 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df["_dist_zona"] = None
         df["_score_dist"] = 0.0
 
-    # ── Score final combinado ──────────────────────────────────────
-    if zona_coords:
-        df["_dist_bucket"] = (df["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
-        df["_score_final"] = (
-            -df["_dist_bucket"] * 10 +
-            df["_score_calidad"] * 1
-        )
-    elif cocina or df["_score_match"].max() > 4:
-        df["_score_final"] = (
-            (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.50 +
-            df["_score_calidad"] * 0.50
-        )
-    else:
-        df["_score_final"] = df["_score_calidad"]
-
-    # ── Filtrar por criterios detectados ──────────────────────────
+    # ── Filtrar primero, luego calcular score final ────────────────
     df_filtrado = df.copy()
+
+    # Filtrar por criterios (terraza, niños, etc.)
     for criterio in criterios:
         mascara = df_filtrado.apply(lambda r: _pasa_criterio(r, criterio), axis=1)
         if mascara.sum() > 0:
             df_filtrado = df_filtrado[mascara]
 
-    # ── Filtrado estricto: búsqueda específica nunca rellena con genéricos ────
+    # Filtrado estricto por cocina o texto específico
     if cocina:
-        # Tipo de cocina: solo los que cumplen mínimo de platos
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
     elif not zona_coords and df["_score_match"].max() > 4:
-        # Plato o término específico: solo los que tienen match real
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-    # Zona y búsqueda genérica: sin filtro de score
+
+    # ── Score final solo sobre los restaurantes filtrados ──────────
+    if zona_coords:
+        df_filtrado["_dist_bucket"] = (df_filtrado["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
+        df_filtrado["_score_final"] = (
+            -df_filtrado["_dist_bucket"] * 10 +
+            df_filtrado["_score_calidad"] * 1
+        )
+    elif cocina or df_filtrado["_score_match"].max() > 4:
+        df_filtrado["_score_final"] = (
+            (df_filtrado["_score_match"] + df_filtrado["_score_nombre"]).clip(0, 10) * 0.50 +
+            df_filtrado["_score_calidad"] * 0.50
+        )
+    else:
+        df_filtrado["_score_final"] = df_filtrado["_score_calidad"]
 
     # ── Filtrar por distancia máxima si hay zona ─────────────────
     if zona_coords and "_dist_zona" in df_filtrado.columns:
