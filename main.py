@@ -911,7 +911,7 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
         # Personal destacado y valoración de servicio
-        "personal_destacado":           str(row.get("personal_destacado", "") or ""),
+        "personal_destacado":           "" if str(row.get("personal_destacado", "") or "").strip() in ("", "nan", "NaN", "None") else str(row.get("personal_destacado", "")),
         "servicio_frases":              str(row.get("servicio_frases", "") or ""),
         "servicio_pos":                 float(row.get("servicio_pos", 0) or 0),
         "servicio_menciones":           float(row.get("servicio_menciones", 0) or 0),
