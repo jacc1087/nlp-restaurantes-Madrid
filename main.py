@@ -533,175 +533,89 @@ def _parsear_platos_str(platos_str: str) -> list:
 
 def _score_cocina(row: pd.Series, cocina: str) -> float:
     """
-    Score de afinidad con una cocina.
-
-    Lógica de dos capas para evitar falsos positivos:
-
-    1. Platos PROPIOS: muy identificativos de esa cocina (zamburiñas → gallega,
-       ramen → japonesa, tikka masala → india...). Cada uno suma fuerte.
-
-    2. Platos COMUNES: presentes en esa cocina pero también en muchas otras
-       (pulpo, empanada, pasta...). Solo suman si hay al menos 1 plato propio
-       o un nombre de restaurante que evoque la cocina.
-
-    Umbral de entrada: el restaurante necesita al menos MIN_SEÑALES_PROPIAS
-    señales de platos propios, O tener nombre_bonus + al menos 1 plato
-    (propio o común). Sin eso, score = 0.
+    Score de afinidad con una cocina basado en criterios estrictos.
+    Un restaurante necesita al menos MIN_PLATOS_COCINA platos del listado
+    de esa cocina para puntuar. Sin mínimo → score 0.
     """
-    MIN_SEÑALES_PROPIAS = 2  # mínimo de platos propios para puntuar sin nombre_bonus
+    MIN_PLATOS_COCINA = 4
 
-    # Platos propios (muy identificativos) y comunes (necesitan contexto)
-    PLATOS_PROPIOS = {
-        "gallega":     ["zamburinas", "zamburiñas", "percebes", "navajas", "vieiras",
-                        "berberechos", "caldo gallego", "lacon", "grelos", "padron",
-                        "filloas", "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
-        "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
-                        "marmitako", "kokotxas", "txakoli", "chipirones en su tinta",
-                        "bacalao al pil pil", "merluza en salsa verde", "pil pil"],
-        "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
-                        "cabrales", "casadielles", "sidra"],
-        "japonesa":    ["ramen", "gyozas", "edamame", "udon", "yakitori", "mochi", "katsu",
-                        "takoyaki", "tonkatsu", "nigiri", "onigiri", "okonomiyaki",
-                        "miso ramen", "soba", "sashimi", "tempura ebi"],
-        "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal",
-                        "tandoori", "chapati", "pakora", "butter chicken", "palak paneer",
-                        "chana masala", "lassi", "dosa", "saag"],
-        "peruana":     ["lomo saltado", "lomo salteado", "causa limena", "anticuchos",
-                        "arroz chaufa", "aji de gallina", "leche de tigre",
-                        "ceviche amazonico", "ceviche pacha", "pachamanquero",
-                        "suspiro limeno", "chicharron peruano", "tiradito"],
-        "venezolana":  ["arepas", "arepa", "pabellon criollo", "cachapa", "cachapas",
-                        "hallaca", "pernil", "caraotas", "tequeños", "mandocas", "chicha"],        "mexicana":    ["burrito", "quesadilla", "fajitas", "enchilada", "pozole",
-                        "carnitas", "mole", "tacos cochinita", "tacos pastor", "chilaquiles",
-                        "chile relleno", "tamales", "tostadas", "tlayudas"],
-        "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki",
-                        "baklava", "dolmades", "kleftiko", "taramasalata"],
-        "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "ossobuco",
-                        "panna cotta", "risotto funghi", "tagliatelle ragu", "pappardelle",
-                        "gnocchi", "cannoli", "ribollita", "arancini", "burrata",
-                        "stracciatella", "saltimbocca", "pizza napolitana"],
-        "francesa":    ["foie gras", "confit de pato", "bouillabaisse", "coq au vin",
-                        "escargots", "crepe suzette", "soufflé", "cassoulet", "magret"],
-        "arabe":       ["shawarma", "falafel", "tabule", "baba ganoush", "labneh",
-                        "shakshuka", "kibbeh", "fattoush", "couscous", "pita"],
+    PLATOS_COCINA = {
+        "gallega":     ["pulpo", "empanada", "percebes", "navajas", "vieiras", "berberechos",
+                        "zamburinas", "caldo gallego", "lacon", "grelos", "padron", "filloas",
+                        "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
+        "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "ossobuco", "panna cotta",
+                        "risotto", "tagliatelle", "pappardelle", "gnocchi", "cannoli", "arancini",
+                        "burrata", "stracciatella", "tiramisu", "lasana", "lasaña", "pasta", "pizza",
+                        "bruschetta", "focaccia", "ribollita"],
+        "peruana":     ["lomo saltado", "lomo salteado", "causa", "anticuchos", "chaufa",
+                        "aji de gallina", "leche de tigre", "tiradito", "ceviche",
+                        "pachamanquero", "chicharron peruano"],
+        "japonesa":    ["ramen", "sushi", "sashimi", "gyozas", "tempura", "udon", "mochi",
+                        "katsu", "takoyaki", "tonkatsu", "nigiri", "yakitori", "edamame",
+                        "miso", "soba"],
+        "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro", "marmitako",
+                        "kokotxas", "txakoli", "chipirones en su tinta", "merluza en salsa verde",
+                        "bacalao", "merluza", "anchoas"],
+        "asturiana":   ["cachopo", "fabada", "oricios", "pote asturiano", "cabrales",
+                        "casadielles", "sidra"],
+        "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal", "tandoori",
+                        "chapati", "pakora", "butter chicken", "palak paneer", "chana masala",
+                        "lassi", "dosa", "saag"],
+        "venezolana":  ["arepa", "arepas", "pabellon criollo", "cachapa", "hallaca", "pernil",
+                        "caraotas", "tequeños", "mandocas", "chicha"],
+        "mexicana":    ["burrito", "quesadilla", "fajitas", "guacamole", "enchilada", "pozole",
+                        "carnitas", "mole", "tacos", "chilaquiles", "chile relleno", "tamales",
+                        "tostadas", "nachos"],
+        "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki", "baklava",
+                        "dolmades", "kleftiko", "taramasalata", "hummus"],
+        "francesa":    ["foie gras", "confit de pato", "bouillabaisse", "coq au vin", "escargots",
+                        "crepe", "souffle", "cassoulet", "magret", "ratatouille", "tartare"],
+        "arabe":       ["shawarma", "falafel", "tabule", "baba ganoush", "labneh", "shakshuka",
+                        "kibbeh", "fattoush", "couscous", "pita", "hummus", "kebab"],
         "colombiana":  ["bandeja paisa", "ajiaco", "sancocho", "changua", "lechona",
-                        "tamales colombianos"],
-        "china":       ["dim sum", "wonton", "pato pekin", "chow mein", "baozi",
-                        "mapo tofu", "pato laqueado"],
-        "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde thai",
-                        "curry rojo thai", "satay", "som tam", "larb", "mango sticky rice"],
+                        "tamales colombianos", "arepa"],
+        "china":       ["dim sum", "wonton", "pato pekin", "chow mein", "baozi", "mapo tofu",
+                        "pato laqueado", "dumplings", "spring roll"],
+        "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde", "curry rojo", "satay",
+                        "som tam", "larb", "mango sticky rice", "khao pad"],
         "americana":   ["smash burger", "pulled pork", "costillas bbq", "mac and cheese",
-                        "chicken wings", "brisket", "coleslaw", "corn dog"],
-        "española":    ["cocido madrileno", "fabada", "pisto manchego", "croquetas jamon",
-                        "tortilla española", "rabo de toro", "callos madrilenos", "oreja",
-                        "patatas bravas", "gazpacho", "salmorejo"],
-        "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
-                         "couscous marroqui", "tajine", "merguez", "harira"],
-    }
-    # Platos que aparecen en múltiples cocinas — solo cuentan con contexto
-    PLATOS_COMUNES = {
-        "gallega":    ["pulpo", "empanada", "berberechos", "mejillones", "almejas"],
-        "vasca":      ["bacalao", "merluza", "anchoas"],
-        "italiana":   ["lasana", "lasaña", "bruschetta", "focaccia", "tiramisu",
-                       "risotto", "pasta", "pizza"],
-        "japonesa":   ["sushi", "tempura", "gyozas"],
-        "peruana":    ["ceviche"],
-        "mexicana":   ["tacos", "guacamole", "nachos"],
-        "española":   ["paella", "chuleton", "jamón", "chorizo"],
-        "francesa":   ["ratatouille", "tartare", "foie", "crepe"],
-        "arabe":      ["hummus", "kebab"],
-        "venezolana": ["pabellon", "chicha"],
-        "americana":  ["brownie", "costillar"],
+                        "chicken wings", "brisket", "coleslaw", "brownie", "costillar"],
+        "española":    ["cocido madrileno", "fabada", "croquetas", "tortilla", "rabo de toro",
+                        "callos", "oreja", "patatas bravas", "gazpacho", "salmorejo", "paella",
+                        "jamon", "chorizo", "pisto"],
     }
 
-    propios_def = PLATOS_PROPIOS.get(cocina, [])
-    comunes_def = PLATOS_COMUNES.get(cocina, [])
+    platos_def = PLATOS_COCINA.get(cocina, [])
+    if not platos_def:
+        return 0.0
 
     fuente = _norm(
         str(row.get("todos_platos", "") or "") + " " +
-        str(row.get("terminos_tfidf", "") or "") + " " +
-        str(row.get("nombre_display", "") or "") + " " +
-        str(row.get("nombre", "") or "")
+        str(row.get("terminos_tfidf", "") or "")
     )
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
 
-    # Bonus por nombre del restaurante (señal muy fuerte)
-    NOMBRES_COCINA = {
-        "peruana":    ["tampu", "kausa", "peru", "lima", "inca"],
-        "mexicana":   ["mexico", "mexicana", "taco", "azteca"],
-        "japonesa":   ["japon", "sushi", "ramen", "tokyo", "osaka", "sibuya", "nikkei"],
-        "italiana":   ["italia", "trattoria", "osteria", "pizzeria", "pasta"],
-        "vasca":      ["euskal", "pintxo", "bilbao", "donosti", "txoko"],
-        "gallega":    ["galicia", "galleg", "santiag", "marisqueria", "marisquer"],
-        "asturiana":  ["astur", "asturias", "sidrer"],
-        "griega":     ["grecia", "greek", "atenas", "hellas"],
-        "arabe":      ["lebanese", "arab", "libano", "siria", "halal"],
-        "venezolana": ["venezuela", "venezolan", "arepa"],
-        "colombiana": ["colombia", "colombian"],
-        "china":      ["china", "canton", "pekin", "shangai", "dragon"],
-        "tailandesa": ["thai", "tailand", "bangkok", "siam"],
-        "americana":  ["burger", "bbq", "smokehouse", "diner"],
-        "española":   ["taberna", "meson", "mesón", "bodega", "tasca"],
-    }
-    nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
-    nombre_bonus = 0.0
-    for hint in NOMBRES_COCINA.get(cocina, []):
-        if hint in nombre_norm:
-            nombre_bonus = 5.0
-            break
-
-    # Bonus por columna tipo_cocina si existe en el CSV
-    tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
-    cocina_ascii = _norm(cocina)
-    if tipo and (cocina_ascii in tipo or tipo in cocina_ascii):
-        nombre_bonus = max(nombre_bonus, 8.0)
-
-    # Contar platos propios encontrados
-    señales_propias = 0
-    score_propios = 0.0
-    for plato in propios_def:
-        plato_norm = _norm(plato)
-        if plato_norm in fuente:
-            señales_propias += 1
-            score_propios += 3.0
+    # Contar platos distintos que coinciden
+    matches = []
+    score = 0.0
+    for plato in platos_def:
+        if _norm(plato) in fuente:
+            matches.append(plato)
+            score += 2.0
+            # Bonus por menciones
             po = next(
                 (p for p in platos_lista
-                 if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
+                 if _norm(plato) in _norm(p["nombre"]) or _norm(p["nombre"]) in _norm(plato)),
                 None
             )
             if po and po["menciones"] > 1:
-                score_propios += math.log2(po["menciones"])
+                score += math.log2(po["menciones"])
 
-    # Platos comunes: solo suman si hay al menos 1 plato propio
-    # (el nombre_bonus NO activa los platos comunes — evita falsos positivos
-    #  como Pastamore que tiene "pasta" en el nombre y "pulpo" suelto)
-    score_comunes = 0.0
-    señales_comunes = 0
-    if señales_propias >= 1:
-        for plato in comunes_def:
-            plato_norm = _norm(plato)
-            if plato_norm in fuente:
-                señales_comunes += 1
-                score_comunes += 1.5
-                po = next(
-                    (p for p in platos_lista
-                     if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
-                    None
-                )
-                if po and po["menciones"] > 1:
-                    score_comunes += math.log2(po["menciones"]) * 0.5
+    # Criterio estricto: mínimo MIN_PLATOS_COCINA platos
+    if len(matches) < MIN_PLATOS_COCINA:
+        return 0.0
 
-    # Umbral final: necesita al menos MIN_SEÑALES_PROPIAS platos propios
-    # O nombre_bonus + al menos 2 platos propios
-    # En ningún caso basta con platos comunes solos
-    if señales_propias < MIN_SEÑALES_PROPIAS:
-        # Excepción: nombre muy evocador (galicia, kausa, sibuya...) + 1 plato propio
-        if nombre_bonus > 0 and señales_propias >= 1:
-            pass  # permitido
-        else:
-            return 0.0
-
-    return round(score_propios + score_comunes + nombre_bonus, 2)
+    return round(score, 2)
 
 
 def _score_texto(row: pd.Series, tokens_query: list) -> float:
