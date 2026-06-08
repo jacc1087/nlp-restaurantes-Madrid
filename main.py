@@ -46,7 +46,7 @@ SOL_COORDS = (40.4168, -3.7038)  # Puerta del Sol — referencia de centro
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _GEMINI_KEY   = os.environ.get("GEMINI_API_KEY", "")
-_GEMINI_MODEL = "gemini-2.0-flash"
+_GEMINI_MODEL = "gemini-1.5-flash"
 
 def _normalizar_consulta_gemini(consulta: str) -> str:
     """
