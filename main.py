@@ -57,24 +57,32 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
     if not _GEMINI_KEY or not consulta.strip():
         return consulta
 
-    prompt = f"""Eres un asistente que normaliza búsquedas de restaurantes en Madrid.
+    prompt = f"""Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA. Sé conservador: si la consulta ya tiene sentido, cámbiala lo mínimo posible.
 
-Tu tarea: interpretar lo que el usuario quiere y devolver UNA SOLA LÍNEA normalizada.
+EJEMPLOS:
+"quiero comer comida gallega" → "cocina gallega"
+"me apetece un italiano" → "cocina italiana"
+"un japonés auténtico" → "cocina japonesa"
+"quiero comer croquetas" → "croquetas"
+"donde comer cachopo" → "cachopo"
+"croquetas cerca de malasaña" → "croquetas cerca de malasaña"
+"carne en lavapiés" → "carne en lavapiés"
+"algo romántico para cenar" → "romántico"
+"sitio para ir con niños" → "apto para niños"
+"algo con terraza" → "con terraza"
+"restaurantes famosos" → "restaurantes famosos"
+"sitios conocidos de madrid" → "restaurantes famosos"
 
-Reglas:
-- Si busca un tipo de cocina: devuelve "cocina X" (ej: "cocina italiana", "cocina peruana")
-- Si busca un plato concreto: devuelve el nombre del plato en español (ej: "cachopo", "lomo saltado")
-- Si busca por zona: incluye el barrio o zona (ej: "cerca de Malasaña", "en Chueca")
-- Si busca por criterio: usa términos claros (ej: "con terraza", "apto para niños", "romántico")
-- Si combina varios: combínalos (ej: "cocina japonesa en Chueca", "croquetas cerca de Sol")
-- Si busca restaurantes famosos/conocidos: devuelve "restaurantes famosos"
-- Conserva nombres propios de restaurantes si los menciona
-- NO inventes información que no esté en la consulta original
-- Si la consulta ya es clara y específica, devuélvela casi igual
+REGLAS ESTRICTAS:
+- Si menciona un tipo de cocina (gallega, italiana, japonesa, peruana...): devuelve "cocina X"
+- Si menciona un plato concreto: devuelve solo el nombre del plato
+- Si menciona zona: consérvala exactamente
+- NO añadas información que no esté en la consulta
+- NO uses "restaurantes famosos" a menos que claramente busque sitios conocidos/famosos
 
-Consulta del usuario: "{consulta}"
+Consulta: "{consulta}"
 
-Responde SOLO con la consulta normalizada, sin explicaciones ni comillas."""
+Responde SOLO con la versión normalizada, sin comillas ni explicaciones."""
 
     try:
         payload = {
