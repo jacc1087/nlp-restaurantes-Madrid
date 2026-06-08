@@ -57,32 +57,30 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
     if not _GEMINI_KEY or not consulta.strip():
         return consulta
 
-    prompt = f"""Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA. Sé conservador: si la consulta ya tiene sentido, cámbiala lo mínimo posible.
-
-EJEMPLOS:
-"quiero comer comida gallega" → "cocina gallega"
-"me apetece un italiano" → "cocina italiana"
-"un japonés auténtico" → "cocina japonesa"
-"quiero comer croquetas" → "croquetas"
-"donde comer cachopo" → "cachopo"
-"croquetas cerca de malasaña" → "croquetas cerca de malasaña"
-"carne en lavapiés" → "carne en lavapiés"
-"algo romántico para cenar" → "romántico"
-"sitio para ir con niños" → "apto para niños"
-"algo con terraza" → "con terraza"
-"restaurantes famosos" → "restaurantes famosos"
-"sitios conocidos de madrid" → "restaurantes famosos"
-
-REGLAS ESTRICTAS:
-- Si menciona un tipo de cocina (gallega, italiana, japonesa, peruana...): devuelve "cocina X"
-- Si menciona un plato concreto: devuelve solo el nombre del plato
-- Si menciona zona: consérvala exactamente
-- NO añadas información que no esté en la consulta
-- NO uses "restaurantes famosos" a menos que claramente busque sitios conocidos/famosos
-
-Consulta: "{consulta}"
-
-Responde SOLO con la versión normalizada, sin comillas ni explicaciones."""
+    prompt = (
+        "Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA.\n\n"
+        "EJEMPLOS (entrada → salida):\n"
+        "quiero comer comida gallega → cocina gallega\n"
+        "me apetece un italiano → cocina italiana\n"
+        "un japonés auténtico → cocina japonesa\n"
+        "quiero comer croquetas → croquetas\n"
+        "donde comer cachopo → cachopo\n"
+        "croquetas cerca de malasaña → croquetas cerca de malasaña\n"
+        "carne en lavapiés → carne en lavapiés\n"
+        "algo romántico para cenar → romántico\n"
+        "sitio para ir con niños → apto para niños\n"
+        "algo con terraza → con terraza\n"
+        "sitios conocidos de madrid → restaurantes famosos\n"
+        "quiero comida vasca → cocina vasca\n"
+        "un buen peruano → cocina peruana\n\n"
+        "REGLAS:\n"
+        "- Cocina/gastronomía de un país o región: SIEMPRE devuelve 'cocina X' (cocina gallega, cocina italiana...)\n"
+        "- Plato concreto: solo el nombre del plato\n"
+        "- Si hay zona: consérvala\n"
+        "- NO añadas nada que no esté en la consulta\n\n"
+        f"Consulta: {consulta!r}\n\n"
+        "Responde SOLO con la versión normalizada, sin comillas."
+    )
 
     try:
         payload = {
