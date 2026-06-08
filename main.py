@@ -85,14 +85,20 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
     try:
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 60},
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 100},
         }
         data = json.dumps(payload).encode()
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
         req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
         resp = _ureq.urlopen(req, timeout=5)
         result = json.loads(resp.read())
-        normalizada = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        candidates = result.get("candidates", [])
+        if not candidates:
+            return consulta
+        parts = candidates[0].get("content", {}).get("parts", [])
+        if not parts:
+            return consulta
+        normalizada = parts[0].get("text", "").strip()
         # Seguridad: si la respuesta es muy larga o rara, usar la original
         if normalizada and len(normalizada) < 200 and len(normalizada) > 2:
             print(f"  [Gemini] '{consulta}' → '{normalizada}'")
