@@ -46,7 +46,7 @@ SOL_COORDS = (40.4168, -3.7038)  # Puerta del Sol — referencia de centro
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _GEMINI_KEY   = os.environ.get("GEMINI_API_KEY", "")
-_GEMINI_MODEL = "gemini-1.5-flash"
+_GEMINI_MODEL = "gemini-2.5-flash"
 
 def _normalizar_consulta_gemini(consulta: str) -> str:
     """
@@ -82,7 +82,7 @@ Responde SOLO con la consulta normalizada, sin explicaciones ni comillas."""
             "generationConfig": {"temperature": 0, "maxOutputTokens": 60},
         }
         data = json.dumps(payload).encode()
-        url = f"https://generativelanguage.googleapis.com/v1/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
         req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
         resp = _ureq.urlopen(req, timeout=5)
         result = json.loads(resp.read())
