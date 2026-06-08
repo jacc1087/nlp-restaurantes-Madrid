@@ -1200,7 +1200,9 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         dist_km = None
         if zona_coords and pd.notna(row.get("_dist_zona")) and row["_dist_zona"] < 999.0:
             dist_km = row["_dist_zona"]
-        restaurantes.append(_fila_a_restaurante(row, distancia_km=dist_km))
+        r = _fila_a_restaurante(row, distancia_km=dist_km)
+        r["tokens"] = tokens  # tokens de la búsqueda para que el frontend destaque el plato
+        restaurantes.append(r)
 
     meta = {
         "cocina": cocina,
