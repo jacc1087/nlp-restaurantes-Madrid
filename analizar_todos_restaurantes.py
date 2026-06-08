@@ -1055,7 +1055,7 @@ def analizar_restaurante(df_r):
 
     # Servicio destacado — sin Gemini, siempre activo
     personal = extraer_personal(df_r['Review'].tolist(), platos_set, n)
-    personal_str_nuevo = ', '.join([t.capitalize() for t, _ in personal])
+    personal_str_nuevo = ', '.join([f"{t.capitalize()}({c})" for t, c in personal])
 
     # Platos
     # Una sola llamada a Gemini (n=15) — top5 es simplemente los primeros 5
