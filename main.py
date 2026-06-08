@@ -456,24 +456,24 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
-    "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
-    "italiano": "italiana", "italia": "italiana",
-    "japones": "japonesa", "japon": "japonesa",
-    "indio": "india", "hindu": "india", "india": "india",
-    "peruano": "peruana", "peru": "peruana",
+    "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
+    "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa",
+    "indio": "india", "india": "india", "hindu": "india",
+    "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
     "espanol": "española", "espanola": "española",
-    "asturiano": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "galicia": "gallega",
-    "vasco": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
-    "frances": "francesa", "francia": "francesa",
-    "griego": "griega", "grecia": "griega",
+    "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
+    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
+    "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
+    "frances": "francesa", "francesa": "francesa", "francia": "francesa",
+    "griego": "griega", "griega": "griega", "grecia": "griega",
     "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
-    "venezolano": "venezolana", "venezuela": "venezolana",
-    "colombiano": "colombiana", "colombia": "colombiana",
-    "chino": "china",
-    "tailandes": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
-    "americano": "americana", "usa": "americana",
-    "mediterraneo": "mediterranea",
+    "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
+    "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
+    "chino": "china", "china": "china",
+    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
+    "americano": "americana", "americana": "americana", "usa": "americana",
+    "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -497,9 +497,14 @@ INTENCIONES_CRITERIO = {
 
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
+    padded = " " + c + " "
+    # Prefijos que preceden al tipo de cocina ("comida X", "restaurante X", "cocina X")
+    for prefijo in ["comida ", "restaurante ", "cocina ", "cuisine "]:
+        for sinonimo, cocina in SINONIMOS_COCINA.items():
+            if prefijo + sinonimo in c:
+                return cocina
     # Buscar sinónimos como palabras completas
     for sinonimo, cocina in SINONIMOS_COCINA.items():
-        padded = " " + c + " "
         if (f" {sinonimo} " in padded or c == sinonimo
                 or c.startswith(sinonimo + " ") or c.endswith(" " + sinonimo)):
             return cocina
