@@ -931,11 +931,13 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Score final combinado ──────────────────────────────────────
     if zona_coords:
-        # Con zona: priorizar cercanía — 65% distancia + 25% calidad + 10% match
+        # Con zona: ordenar por distancia real, calidad solo como desempate
+        # Se redondea la distancia a intervalos de 0.5 km para que la calidad
+        # desempate entre restaurantes igualmente cercanos
+        df["_dist_bucket"] = (df["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
         df["_score_final"] = (
-            df["_score_dist"]   * 0.65 +
-            df["_score_calidad"] * 0.25 +
-            (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.10
+            -df["_dist_bucket"] * 10 +          # primero los más cercanos
+            df["_score_calidad"] * 1             # desempate por calidad dentro del mismo bucket
         )
     elif cocina or df["_score_match"].max() > 4:
         # Con match de texto/cocina: 50% match + 50% calidad
