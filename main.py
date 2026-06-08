@@ -631,43 +631,76 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
 
 
 def _score_texto(row: pd.Series, tokens_query: list) -> float:
-    """Score de coincidencia de tokens de consulta contra platos/términos del restaurante."""
-    fuente = _norm(
-        str(row.get("todos_platos", "") or "") + " " +
-        str(row.get("terminos_tfidf", "") or "") + " " +
-        str(row.get("nombre_display", "") or "")
-    )
+    """
+    Score de coincidencia para búsquedas de plato específico.
+    Si el token coincide con un plato en todos_platos, exige MIN_MENCIONES_PLATO
+    menciones para puntuar — evita devolver restaurantes donde ese plato apareció
+    una sola vez de pasada en una reseña.
+    """
+    MIN_MENCIONES_PLATO = 3  # mínimo de menciones para considerar el plato como real
+
+    platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
+    nombre_display = _norm(str(row.get("nombre_display", "") or ""))
+
     score = 0.0
     for qt in tokens_query:
         if len(qt) < 3:
             continue
-        if qt in fuente:
-            score += 2.0
-            # Bonus por menciones
-            platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
-            po = next((p for p in platos_lista if qt in _norm(p["nombre"]) or _norm(p["nombre"]) in qt), None)
-            if po and po["menciones"] > 1:
-                score += math.log2(po["menciones"])
+
+        # Buscar el token en los platos del restaurante
+        po = next(
+            (p for p in platos_lista
+             if qt in _norm(p["nombre"]) or _norm(p["nombre"]) in qt),
+            None
+        )
+
+        if po:
+            # Coincide con un plato: exigir mínimo de menciones
+            if po["menciones"] >= MIN_MENCIONES_PLATO:
+                score += 2.0 + math.log2(po["menciones"])
+            # Con pocas menciones no puntúa — el plato no es representativo
+        else:
+            # No está en todos_platos: buscar en terminos_tfidf o nombre
+            fuente_sec = _norm(
+                str(row.get("terminos_tfidf", "") or "") + " " + nombre_display
+            )
+            if qt in fuente_sec:
+                score += 1.0  # coincidencia débil (término genérico o nombre)
+
     return score
 
 
 def _score_calidad(row: pd.Series) -> float:
     """
-    Score de calidad combinado 0-10 — idéntico a calcular_score_ranking del Proyecto A
-    pero usando columnas del Proyecto B.
+    Score de calidad combinado 0-10.
 
-    Pesos:
-      35% — valoración Google (0-5 → 0-10)
+    Pesos base:
+      35% — valoración Google bayesiana (ponderada por nº de votaciones)
       35% — % reseñas positivas (nlptown)
       30% — avg_estrellas_modelo (nlptown, 1-5 → 0-10)
+
+    La valoración Google se pondera bayesianamente: un restaurante con pocas
+    votaciones se acerca a la media global (prior = 4.3, m = 500 votos).
+    Esto evita que un 4.9 con 200 votos supere a un 4.7 con 10.000.
     """
-    val = float(row.get("valoracion_display", 0) or 0)
-    val_norm = (val / 5.0) * 10
+    # ── Valoración Google bayesiana ───────────────────────────────
+    PRIOR_MEDIA = 4.3   # media global estimada del conjunto
+    PRIOR_VOTOS = 500   # peso del prior: equivale a N votos "ficticios" en la media
 
-    pct_pos = float(row.get("pct_positivo", 0) or 0)  # ya es 0-100
+    val_raw  = float(row.get("valoracion_display", 0) or 0)
+    votos    = float(row.get("votaciones", 0) or 0)
 
-    avg_est = float(row.get("avg_estrellas_modelo", 3) or 3)
-    avg_norm = ((avg_est - 1) / 4.0) * 10  # 1-5 → 0-10
+    if votos > 0 and val_raw > 0:
+        val_bay = (PRIOR_VOTOS * PRIOR_MEDIA + votos * val_raw) / (PRIOR_VOTOS + votos)
+    else:
+        val_bay = PRIOR_MEDIA  # sin votos → asignar media
+
+    val_norm = (val_bay / 5.0) * 10
+
+    # ── NLP ───────────────────────────────────────────────────────
+    pct_pos  = float(row.get("pct_positivo", 0) or 0)   # 0-100
+    avg_est  = float(row.get("avg_estrellas_modelo", 3) or 3)
+    avg_norm = ((avg_est - 1) / 4.0) * 10               # 1-5 → 0-10
 
     return round(val_norm * 0.35 + pct_pos / 10.0 * 0.35 + avg_norm * 0.30, 2)
 
@@ -884,8 +917,17 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             df_filtrado = df_filtrado[mascara]
 
     # Filtrado por texto específico (sin cocina, sin zona)
-    if not cocina and not zona_coords and df["_score_match"].max() > 4:
-        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
+    if not cocina and not zona_coords:
+        max_match = df["_score_match"].max()
+        if max_match > 0:
+            # Hay restaurantes que coinciden con el plato/término buscado
+            df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
+            if df_filtrado.empty:
+                # Ninguno pasa el umbral de menciones → devolver vacío, no relleno genérico
+                return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
+        elif tokens:
+            # Se buscó algo específico pero ningún restaurante lo tiene con suficientes menciones
+            return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
 
     # ── Score final solo sobre los restaurantes filtrados ──────────
     if zona_coords and cocina:
@@ -928,7 +970,15 @@ def _buscar(consulta: str) -> tuple[list, dict]:
                 df_filtrado = cerca5
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
-    n_resultados = 6 if (cocina or tokens or criterios) else 8
+    # Si hay búsqueda específica (cocina o plato), devolver solo los que pasan el filtro
+    # sin rellenar con otros — aunque sea 1 solo resultado.
+    # En búsqueda genérica (sin filtros), limitar a 8 para no saturar.
+    if cocina or (tokens and df_filtrado["_score_match"].max() > 0):
+        n_resultados = min(len(df_filtrado), 8)  # máximo 8, pero sin relleno
+    elif criterios:
+        n_resultados = 8
+    else:
+        n_resultados = 8
     df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
 
     restaurantes = []
@@ -943,6 +993,7 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         "zona": zona_coords,
         "criterios": criterios,
         "n_total": len(df_filtrado),
+        "tokens": tokens,
     }
     return restaurantes, meta
 
@@ -959,11 +1010,17 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     """
     if not restaurantes:
         cocina_vacia = meta.get("cocina")
+        tokens_buscados = meta.get("tokens", [])
         if cocina_vacia:
             return (
                 f"No hay ningún restaurante en la base de datos con suficientes platos de cocina {cocina_vacia} "
-                f"(mínimo 4 platos identificados). No te devuelvo alternativas genéricas: si quieres, "
-                f"puedes buscar por un plato concreto o por otra cocina."
+                f"(mínimo 3 platos identificados en reseñas). No te devuelvo alternativas genéricas."
+            )
+        if tokens_buscados:
+            plato = " ".join(tokens_buscados)
+            return (
+                f"No he encontrado ningún restaurante donde «{plato}» aparezca con suficientes menciones en reseñas. "
+                f"Puede que ese plato no esté bien representado en los datos o que ningún restaurante lo destaque."
             )
         return (
             "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
