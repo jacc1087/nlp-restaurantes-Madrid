@@ -855,26 +855,48 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     # ── Filtrar primero, luego calcular score final ────────────────
     df_filtrado = df.copy()
 
-    # Filtrar por criterios (terraza, niños, etc.)
+    # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
+    # Si se pide una cocina específica y un restaurante no tiene >= 4 platos de esa
+    # cocina (_score_match == 0), se excluye sin excepción. No se rellena con
+    # restaurantes genéricos: si no hay ninguno, se devuelve lista vacía.
+    if cocina:
+        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
+        # Si tras el filtro no queda ningún restaurante → devolver vacío inmediatamente
+        if df_filtrado.empty:
+            return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
+
+    # Filtrar por criterios (terraza, niños, etc.) — solo si hay resultados previos
     for criterio in criterios:
         mascara = df_filtrado.apply(lambda r: _pasa_criterio(r, criterio), axis=1)
         if mascara.sum() > 0:
             df_filtrado = df_filtrado[mascara]
 
-    # Filtrado estricto por cocina o texto específico
-    if cocina:
-        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-    elif not zona_coords and df["_score_match"].max() > 4:
+    # Filtrado por texto específico (sin cocina, sin zona)
+    if not cocina and not zona_coords and df["_score_match"].max() > 4:
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
 
     # ── Score final solo sobre los restaurantes filtrados ──────────
-    if zona_coords:
+    if zona_coords and cocina:
+        # Cocina + zona: primero se exige cocina (ya filtrado arriba),
+        # luego ordenar por proximidad y dentro de cada distancia por calidad
         df_filtrado["_dist_bucket"] = (df_filtrado["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
         df_filtrado["_score_final"] = (
             -df_filtrado["_dist_bucket"] * 10 +
             df_filtrado["_score_calidad"] * 1
         )
-    elif cocina or df_filtrado["_score_match"].max() > 4:
+    elif zona_coords:
+        df_filtrado["_dist_bucket"] = (df_filtrado["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
+        df_filtrado["_score_final"] = (
+            -df_filtrado["_dist_bucket"] * 10 +
+            df_filtrado["_score_calidad"] * 1
+        )
+    elif cocina:
+        # Solo cocina: ordenar por calidad (el match ya garantiza que son de esa cocina)
+        df_filtrado["_score_final"] = (
+            df_filtrado["_score_match"].clip(0, 10) * 0.40 +
+            df_filtrado["_score_calidad"] * 0.60
+        )
+    elif df_filtrado["_score_match"].max() > 4:
         df_filtrado["_score_final"] = (
             (df_filtrado["_score_match"] + df_filtrado["_score_nombre"]).clip(0, 10) * 0.50 +
             df_filtrado["_score_calidad"] * 0.50
@@ -924,6 +946,13 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     No usa LLM — es determinista y rápido.
     """
     if not restaurantes:
+        cocina_vacia = meta.get("cocina")
+        if cocina_vacia:
+            return (
+                f"No hay ningún restaurante en la base de datos con suficientes platos de cocina {cocina_vacia} "
+                f"(mínimo 4 platos identificados). No te devuelvo alternativas genéricas: si quieres, "
+                f"puedes buscar por un plato concreto o por otra cocina."
+            )
         return (
             "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
             "Prueba con otros términos: tipo de cocina, plato concreto, zona de Madrid o criterios como terraza, niños, mascotas..."
