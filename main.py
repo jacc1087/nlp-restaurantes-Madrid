@@ -1100,14 +1100,6 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
     if cocina:
-        # Bonus: restaurantes con cocina_detectada coincidente suben en score
-        if "cocina_detectada" in df_filtrado.columns:
-            df_filtrado["_score_match"] = df_filtrado.apply(
-                lambda r: r["_score_match"] * 1.5
-                if str(r.get("cocina_detectada","")).lower() == cocina.lower()
-                else r["_score_match"],
-                axis=1
-            )
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
         if df_filtrado.empty:
             return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
