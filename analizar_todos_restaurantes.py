@@ -928,28 +928,77 @@ def extraer_platos(serie_reviews, n=5, nombre_restaurante=''):
             print(f"       Rechazados: {rechazados}")
     return platos_norm
 
-def extraer_personal(serie_reviews, platos_set, n_resenas, n=5):
-    freq_total   = Counter()
-    freq_resenas = Counter()
-    for r in serie_reviews:
-        texto    = limpiar(str(r))
-        palabras = re.findall(r"[a-záéíóúüñ]{4,}", texto)
-        tokens_set = set()
-        for t in palabras:
-            if t not in STOP_ES and t not in NO_PLATOS and t not in platos_set:
-                freq_total[t] += 1
-                tokens_set.add(t)
-        for t in tokens_set:
-            freq_resenas[t] += 1
-    candidatos = [
-        (t, freq_total[t]) for t in freq_total
-        if freq_resenas.get(t,0) >= 2
-        and freq_resenas.get(t,0) <= n_resenas * 0.40
-    ]
-    candidatos.sort(key=lambda x: -x[1])
-    nombres = clasificar_nombres([t for t,_ in candidatos[:30]])
-    personal = [(t,c) for t,c in candidatos if t in nombres]
-    return personal[:n]
+_STOP_PERSONAL = {
+    'el','la','los','las','un','una','de','del','al','en','con','por','que',
+    'nos','les','fue','es','era','son','muy','todo','bien','mal','hay','han',
+    'comida','servicio','lugar','sitio','restaurante','mesa','plato','trato',
+    'precio','ambiente','terraza','carta','vino','agua','pan','cafe','postre',
+    'excelente','bueno','buena','malo','mala','genial','increible','perfecto',
+    'impecable','fantastico','amable','atento','atenta','profesional','maravilloso',
+    'siempre','nunca','tambien','ademas','mucho','poco','nada','algo',
+    'personal','equipo','staff','gente','chico','chica','senor','senora',
+    'madrid','calle','verdad','parte','lado','vez','veces','dia','noche',
+    'tarde','atencion','experiencia','visita','reserva','encanto','rapido',
+    'recomendable','recomendado','volveremos','volvere','volveria','repetir',
+    'seguro','duda','pronto','gracias','especialmente','destacar','estupendo',
+    'espectacular','inmejorable','fenomenal','extraordinario','sobresaliente',
+    'excepcional','agradable','simpatico','simpatica','amables','atentos',
+    'educados','correcto','todos','algunas','algunos','este','esta','estos',
+    'aqui','alli','cuando','como','para','mas','menos','tan','tanto','igual',
+    'camarero','camarera','chef','cocinero','maitre','gerente','encargado',
+    'dueno','duena','propietario','socio','sala','cocina','local','negocio',
+    'hora','minuto','momento','primera','segunda','ultima','proxima',
+    'sabor','textura','calidad','cantidad','presentacion',
+    'sushi','pizza','vinos','cerveza','mariscos','tapas','pasta','arabe',
+    'asiatica','cilantro','atendio','recibido','encantador','encantadora',
+    'vermut','amor','guerrero','ella','ellos','ellas','nosotros','vosotros',
+    'tod','mare','pero','sus','sin','hoy','sale','tampoco','nuestro','resulto',
+    'extraordinar','platos','volvemos','super','rapidos','atentas',
+}
+
+_PATRONES_PERSONAL = [
+    r'gracias\s+a\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})(?:\s+y\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12}))?',
+    r'de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})\s+(?:fue|estuvo)\s+(?:excelente|impecable|genial|increible|fantastico|perfecto|excepcional|maravilloso|sobresaliente|extraordinario)',
+    r'([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})\s+(?:fue|es|estuvo)\s+(?:muy\s+|super\s+)?(?:amable|atento|atenta|profesional|excepcional|genial|increible|fantastico|impecable|simpatico|simpatica|encantador|encantadora)',
+    r'(?:el\s+camarero|la\s+camarera|el\s+maitre|el\s+chef|el\s+sommelier|el\s+encargado|la\s+encargada|el\s+gerente)\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+    r'(?:recomendaciones?|consejos?|sugerencias?)\s+de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+    r'nos\s+(?:atendio|ayudo|explico|recomendo|asesoro|recibio)\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+    r'(?:destacar|mencionar|agradecer|felicitar)\s+a\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+    r'atendidos?\s+por\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+    r'(?:labor|trabajo|profesionalidad|dedicacion|amabilidad)\s+de\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00fc\u00f1]{3,12})',
+]
+
+def _norm_personal(s):
+    import unicodedata as _ud
+    s = s.lower()
+    s = _ud.normalize('NFD', s)
+    return ''.join(c for c in s if _ud.category(c) != 'Mn')
+
+def extraer_personal(serie_reviews, platos_set=None, n_resenas=90, n=3):
+    """
+    Extrae nombres de personal destacado usando patrones de mencion directa.
+    Sin Gemini — determinista y sin coste de tokens.
+    Solo cuenta un nombre si aparece en >= 2 resenas distintas.
+    """
+    MIN_RESENAS_NOMBRE = 2
+    contador = Counter()
+    for resena in serie_reviews:
+        texto = _norm_personal(str(resena or ''))
+        encontrados_esta_resena = set()
+        for patron in _PATRONES_PERSONAL:
+            for match in re.finditer(patron, texto):
+                for grupo in match.groups():
+                    if grupo:
+                        nombre = grupo.strip()
+                        if (nombre not in _STOP_PERSONAL
+                                and len(nombre) >= 3
+                                and len(nombre) <= 12
+                                and nombre.isalpha()):
+                            encontrados_esta_resena.add(nombre)
+        for nombre in encontrados_esta_resena:
+            contador[nombre] += 1
+    return [(nombre, count) for nombre, count in contador.most_common(n * 2)
+            if count >= MIN_RESENAS_NOMBRE][:n]
 
 # ─────────────────────────────────────────────
 # ANÁLISIS POR RESTAURANTE
@@ -1004,14 +1053,9 @@ def analizar_restaurante(df_r):
     criterios_log = ', '.join(f'{k}={"✓" if v else "✗"}' for k,v in criterios.items())
     print(f"    criterios: {criterios_log}")
 
-    # Servicio destacado — extraer nombres del personal de las reseñas
-    # Se hace siempre (también en MODO_ECONOMICO) porque reutiliza clasificar_nombres
-    # que ya tiene caché y no cuesta tokens para nombres ya conocidos
-    if not MODO_ECONOMICO:
-        personal    = extraer_personal(df_r['Review'], platos_set, n)
-        personal_str_nuevo = ', '.join([f"{t.capitalize()}({c})" for t,c in personal])
-    else:
-        personal_str_nuevo = None  # se asigna abajo desde CSV previo
+    # Servicio destacado — sin Gemini, siempre activo
+    personal = extraer_personal(df_r['Review'].tolist(), platos_set, n)
+    personal_str_nuevo = ', '.join([t.capitalize() for t, _ in personal])
 
     # Platos
     # Una sola llamada a Gemini (n=15) — top5 es simplemente los primeros 5
@@ -1022,20 +1066,7 @@ def analizar_restaurante(df_r):
     todos_str    = ', '.join([f"{p}({c})" for p,c in platos_todos])
     platos_set   = {p for p,_ in platos_todos}
 
-    # Personal — en modo económico reusar del CSV previo
-    if MODO_ECONOMICO:
-        personal_str = ''
-        if os.path.exists(OUTPUT_CSV):
-            try:
-                _prev = pd.read_csv(OUTPUT_CSV)
-                _fila_prev = _prev[_prev['id_restaurante'] == rid]
-                if not _fila_prev.empty and 'personal_destacado' in _prev.columns:
-                    personal_str = str(_fila_prev['personal_destacado'].iloc[0])
-                    if personal_str == 'nan': personal_str = ''
-            except Exception:
-                pass
-    else:
-        personal_str = personal_str_nuevo or ''
+    personal_str = personal_str_nuevo or ''
 
     # Frases de servicio — extraer fragmentos positivos de reseñas que mencionan
     # al personal por nombre o elogian el servicio (sin coste Gemini)
