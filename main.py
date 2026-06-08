@@ -542,7 +542,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     Un restaurante necesita al menos MIN_PLATOS_COCINA platos del listado
     de esa cocina para puntuar. Sin mínimo → score 0.
     """
-    MIN_PLATOS_COCINA = 4
+    MIN_PLATOS_COCINA = 3
 
     PLATOS_COCINA = {
         "gallega":     ["pulpo", "empanada", "percebes", "navajas", "vieiras", "berberechos",
@@ -605,19 +605,26 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     score = 0.0
     for plato in platos_def:
         if _norm(plato) in fuente:
-            matches.append(plato)
-            score += 2.0
-            # Bonus por menciones
             po = next(
                 (p for p in platos_lista
                  if _norm(plato) in _norm(p["nombre"]) or _norm(p["nombre"]) in _norm(plato)),
                 None
             )
-            if po and po["menciones"] > 1:
-                score += math.log2(po["menciones"])
+            menciones = po["menciones"] if po else 1
+            matches.append({"plato": plato, "menciones": menciones})
+            score += 2.0
+            if menciones > 1:
+                score += math.log2(menciones)
 
     # Criterio estricto: mínimo MIN_PLATOS_COCINA platos
     if len(matches) < MIN_PLATOS_COCINA:
+        return 0.0
+
+    # Filtro de relevancia: los platos deben ser reales, no menciones anecdóticas.
+    # Pasa si: al menos 2 platos con >1 mención, O un plato estrella con >5 menciones
+    con_menciones = sum(1 for m in matches if m["menciones"] > 1)
+    plato_estrella = any(m["menciones"] > 8 for m in matches)
+    if con_menciones < 2 and not plato_estrella:
         return 0.0
 
     return round(score, 2)
