@@ -291,15 +291,42 @@ def _norm(s: str) -> str:
     return "".join(c for c in s if unicodedata.category(c) != "Mn")
 
 
+# Caché en memoria para geocodificación de calles (evita llamadas repetidas)
+_geocode_cache: dict = {}
+
+def _geocodificar_calle(texto: str) -> Optional[tuple]:
+    """Geocodifica una calle o lugar de Madrid usando Nominatim (OpenStreetMap)."""
+    if texto in _geocode_cache:
+        return _geocode_cache[texto]
+    try:
+        import urllib.request, json as _json, urllib.parse
+        query = urllib.parse.quote(f"{texto}, Madrid, España")
+        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1&countrycodes=es"
+        req = urllib.request.Request(url, headers={"User-Agent": "RestaurantesMadridTFM/1.0"})
+        with urllib.request.urlopen(req, timeout=3) as r:
+            data = _json.loads(r.read())
+        if data:
+            coords = (float(data[0]["lat"]), float(data[0]["lon"]))
+            _geocode_cache[texto] = coords
+            print(f"  [geocode] '{texto}' → {coords}")
+            return coords
+    except Exception as e:
+        print(f"  [geocode] error: {e}")
+    _geocode_cache[texto] = None
+    return None
+
 def _detectar_zona(consulta: str) -> Optional[tuple]:
-    """Detecta si la consulta menciona una zona de Madrid y devuelve sus coordenadas."""
+    """Detecta si la consulta menciona una zona de Madrid y devuelve sus coordenadas.
+    Si no está en el diccionario de zonas, intenta geocodificar la calle con Nominatim."""
     c = _norm(consulta)
-    # Patrones de extracción de zona
+    # Patrones de extracción de zona/calle
     patrones = [
         r'cerca de(?:l| la| los| las)?\s+([\w\s]+?)(?:\s+y|\s+quiero|\s+busco|\s+que|,|\.|$)',
         r'estoy en\s+([\w\s]+?)(?:\s+y|\s+quiero|\s+busco|,|\.|$)',
-        r'en\s+([\w\s]{3,30}?)(?:\s+quiero|\s+busco|\s+que|,|\.|$)',
+        r'calle\s+([\w\s]{2,30}?)(?:\s+quiero|\s+busco|\s+que|,|\.|$)',
+        r'por la calle\s+([\w\s]{2,30}?)(?:\s+quiero|\s+busco|,|\.|$)',
         r'por\s+([\w\s]{3,20}?)(?:\s+quiero|\s+busco|,|\.|$)',
+        r'en\s+([\w\s]{3,30}?)(?:\s+quiero|\s+busco|\s+que|,|\.|$)',
         r'barrio de\s+([\w\s]+?)(?:,|\.|$)',
         r'zona de\s+([\w\s]+?)(?:,|\.|$)',
     ]
@@ -307,14 +334,19 @@ def _detectar_zona(consulta: str) -> Optional[tuple]:
         m = re.search(patron, c)
         if m:
             zona_raw = m.group(1).strip()
-            # Buscar en diccionario
+            # 1. Buscar exacto en diccionario
             if zona_raw in ZONAS_MADRID:
                 return ZONAS_MADRID[zona_raw]
-            # Búsqueda parcial
+            # 2. Búsqueda parcial en diccionario
             for nombre, coords in ZONAS_MADRID.items():
                 if zona_raw in nombre or nombre in zona_raw:
                     return coords
-    # Búsqueda directa en texto
+            # 3. Geocodificar como calle de Madrid
+            if len(zona_raw) >= 4:
+                coords = _geocodificar_calle(zona_raw)
+                if coords:
+                    return coords
+    # Búsqueda directa en texto (diccionario)
     for nombre, coords in sorted(ZONAS_MADRID.items(), key=lambda x: -len(x[0])):
         if nombre in c:
             return coords
