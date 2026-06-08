@@ -672,13 +672,16 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
             if po and po["menciones"] > 1:
                 score_propios += math.log2(po["menciones"])
 
-    # Platos comunes: solo suman si hay contexto (platos propios O nombre_bonus)
+    # Platos comunes: solo suman si hay al menos 1 plato propio
+    # (el nombre_bonus NO activa los platos comunes — evita falsos positivos
+    #  como Pastamore que tiene "pasta" en el nombre y "pulpo" suelto)
     score_comunes = 0.0
-    tiene_contexto = señales_propias >= MIN_SEÑALES_PROPIAS or nombre_bonus > 0
-    if tiene_contexto:
+    señales_comunes = 0
+    if señales_propias >= 1:
         for plato in comunes_def:
             plato_norm = _norm(plato)
             if plato_norm in fuente:
+                señales_comunes += 1
                 score_comunes += 1.5
                 po = next(
                     (p for p in platos_lista
@@ -688,9 +691,15 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                 if po and po["menciones"] > 1:
                     score_comunes += math.log2(po["menciones"]) * 0.5
 
-    # Sin contexto y sin nombre_bonus → score 0 (evita falsos positivos)
-    if not tiene_contexto:
-        return 0.0
+    # Umbral final: necesita al menos MIN_SEÑALES_PROPIAS platos propios
+    # O nombre_bonus + al menos 2 platos propios
+    # En ningún caso basta con platos comunes solos
+    if señales_propias < MIN_SEÑALES_PROPIAS:
+        # Excepción: nombre muy evocador (galicia, kausa, sibuya...) + 1 plato propio
+        if nombre_bonus > 0 and señales_propias >= 1:
+            pass  # permitido
+        else:
+            return 0.0
 
     return round(score_propios + score_comunes + nombre_bonus, 2)
 
@@ -1130,31 +1139,29 @@ def health():
     }
 
 
-# ── Log de consultas ─────────────────────────────────────────────────────────
-LOG_PATH = os.path.join(os.path.dirname(__file__), "historial_consultas.csv")
-_log_lock = __import__("threading").Lock()
+# ── Log de consultas en memoria ──────────────────────────────────────────────
+import threading as _threading
+from datetime import datetime as _datetime
+
+_historial_memoria: list = []   # se resetea al redesplegar
+_log_lock = _threading.Lock()
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "tfm2024admin")  # configura en Render → Environment
 
 def _guardar_log(consulta: str, respuesta: str, restaurantes: list):
-    """Guarda cada consulta y respuesta en historial_consultas.csv."""
+    """Guarda cada consulta en memoria."""
     try:
-        import csv
         nombres = ", ".join(r.get("nombre", "") for r in restaurantes[:5])
-        fila = {
-            "fecha":        __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        entrada = {
+            "fecha":        _datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "consulta":     consulta,
-            "respuesta":    respuesta.replace("\n", " ")[:500],
+            "respuesta":    respuesta.replace("\n", " ")[:600],
             "restaurantes": nombres,
             "n_resultados": len(restaurantes),
         }
-        existe = os.path.exists(LOG_PATH)
         with _log_lock:
-            with open(LOG_PATH, "a", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(fila.keys()))
-                if not existe:
-                    writer.writeheader()
-                writer.writerow(fila)
+            _historial_memoria.append(entrada)
     except Exception as e:
-        print(f"  [log] error guardando: {e}")
+        print(f"  [log] error: {e}")
 
 
 @app.post("/recomendar", response_model=RecomendacionResponse)
@@ -1184,6 +1191,53 @@ def endpoint_recomendar(request: ConsultaRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/historial")
+def admin_historial(key: str = ""):
+    """Endpoint privado — muestra el historial de consultas en HTML."""
+    if key != ADMIN_KEY:
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse("<h2>403 — Acceso denegado</h2>", status_code=403)
+    from fastapi.responses import HTMLResponse
+    with _log_lock:
+        entradas = list(reversed(_historial_memoria))
+    filas = ""
+    for e in entradas:
+        filas += f"""
+        <tr>
+          <td>{e['fecha']}</td>
+          <td>{e['consulta']}</td>
+          <td style='color:#888;font-size:12px'>{e['restaurantes']}</td>
+          <td style='text-align:center'>{e['n_resultados']}</td>
+          <td style='font-size:11px;color:#666'>{e['respuesta'][:200]}...</td>
+        </tr>"""
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <title>Historial de consultas</title>
+  <style>
+    body {{ font-family: sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }}
+    h1 {{ color: #c8a96e; }}
+    table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
+    th {{ background: #1a1a1a; color: #c8a96e; padding: 10px; text-align: left; }}
+    td {{ padding: 8px 10px; border-bottom: 1px solid #2a2a2a; vertical-align: top; }}
+    tr:hover td {{ background: #161616; }}
+  </style>
+</head>
+<body>
+  <h1>📋 Historial de consultas</h1>
+  <p style='color:#666'>{len(entradas)} consultas desde el último despliegue</p>
+  <table>
+    <tr>
+      <th>Fecha</th><th>Consulta</th><th>Restaurantes</th><th>N</th><th>Respuesta</th>
+    </tr>
+    {filas if filas else "<tr><td colspan='5' style='color:#555;text-align:center'>Sin consultas aún</td></tr>"}
+  </table>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 
 @app.get("/restaurantes")
