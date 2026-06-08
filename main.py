@@ -25,6 +25,7 @@ import ast
 from typing import List, Optional
 
 import pandas as pd
+import urllib.request as _ureq
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -39,6 +40,61 @@ ARCHIVO_RANKING  = os.path.join(BASE_DIR, "ranking.csv")
 CACHE_COORDS    = os.path.join(BASE_DIR, ".cache_coords.json")
 
 SOL_COORDS = (40.4168, -3.7038)  # Puerta del Sol — referencia de centro
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GEMINI — NORMALIZADOR DE CONSULTAS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_GEMINI_KEY   = os.environ.get("GEMINI_API_KEY", "")
+_GEMINI_MODEL = "gemini-2.0-flash"
+
+def _normalizar_consulta_gemini(consulta: str) -> str:
+    """
+    Usa Gemini para interpretar la consulta del usuario y normalizarla
+    a términos que el motor de búsqueda entiende bien.
+    Si Gemini no está disponible o falla, devuelve la consulta original.
+    """
+    if not _GEMINI_KEY or not consulta.strip():
+        return consulta
+
+    prompt = f"""Eres un asistente que normaliza búsquedas de restaurantes en Madrid.
+
+Tu tarea: interpretar lo que el usuario quiere y devolver UNA SOLA LÍNEA normalizada.
+
+Reglas:
+- Si busca un tipo de cocina: devuelve "cocina X" (ej: "cocina italiana", "cocina peruana")
+- Si busca un plato concreto: devuelve el nombre del plato en español (ej: "cachopo", "lomo saltado")
+- Si busca por zona: incluye el barrio o zona (ej: "cerca de Malasaña", "en Chueca")
+- Si busca por criterio: usa términos claros (ej: "con terraza", "apto para niños", "romántico")
+- Si combina varios: combínalos (ej: "cocina japonesa en Chueca", "croquetas cerca de Sol")
+- Si busca restaurantes famosos/conocidos: devuelve "restaurantes famosos"
+- Conserva nombres propios de restaurantes si los menciona
+- NO inventes información que no esté en la consulta original
+- Si la consulta ya es clara y específica, devuélvela casi igual
+
+Consulta del usuario: "{consulta}"
+
+Responde SOLO con la consulta normalizada, sin explicaciones ni comillas."""
+
+    try:
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 60},
+        }
+        data = json.dumps(payload).encode()
+        url = f"https://generativelanguage.googleapis.com/v1/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
+        req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=5)
+        result = json.loads(resp.read())
+        normalizada = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+        # Seguridad: si la respuesta es muy larga o rara, usar la original
+        if normalizada and len(normalizada) < 200 and len(normalizada) > 2:
+            print(f"  [Gemini] '{consulta}' → '{normalizada}'")
+            return normalizada
+    except Exception as e:
+        print(f"  [Gemini normalizer] error: {e}")
+
+    return consulta
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ESTADO GLOBAL
@@ -944,6 +1000,9 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     if df_global is None:
         return [], {}
 
+    # Normalizar consulta con Gemini antes de procesar
+    consulta = _normalizar_consulta_gemini(consulta)
+
     df = df_global.copy()
     consulta_norm = _norm(consulta)
     # Filtrar tokens que no aportan información de búsqueda
@@ -1021,6 +1080,18 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         # Si tras el filtro no queda ningún restaurante → devolver vacío inmediatamente
         if df_filtrado.empty:
             return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
+
+    # FILTRO PLATO + ZONA: si el usuario busca un plato concreto cerca de una zona,
+    # filtrar primero por los que tienen ese plato, luego ordenar por distancia.
+    # Evita devolver los restaurantes más cercanos que no tienen el plato.
+    if not cocina and zona_coords and tokens:
+        max_match = df["_score_match"].max()
+        if max_match > 0:
+            df_con_plato = df_filtrado[df_filtrado["_score_match"] > 0]
+            if not df_con_plato.empty:
+                df_filtrado = df_con_plato
+            else:
+                return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
 
     # Filtrar por criterios (terraza, niños, etc.) — solo si hay resultados previos
     for criterio in criterios:
