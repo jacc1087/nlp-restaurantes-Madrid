@@ -1130,6 +1130,33 @@ def health():
     }
 
 
+# ── Log de consultas ─────────────────────────────────────────────────────────
+LOG_PATH = os.path.join(os.path.dirname(__file__), "historial_consultas.csv")
+_log_lock = __import__("threading").Lock()
+
+def _guardar_log(consulta: str, respuesta: str, restaurantes: list):
+    """Guarda cada consulta y respuesta en historial_consultas.csv."""
+    try:
+        import csv
+        nombres = ", ".join(r.get("nombre", "") for r in restaurantes[:5])
+        fila = {
+            "fecha":        __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "consulta":     consulta,
+            "respuesta":    respuesta.replace("\n", " ")[:500],
+            "restaurantes": nombres,
+            "n_resultados": len(restaurantes),
+        }
+        existe = os.path.exists(LOG_PATH)
+        with _log_lock:
+            with open(LOG_PATH, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(fila.keys()))
+                if not existe:
+                    writer.writeheader()
+                writer.writerow(fila)
+    except Exception as e:
+        print(f"  [log] error guardando: {e}")
+
+
 @app.post("/recomendar", response_model=RecomendacionResponse)
 def endpoint_recomendar(request: ConsultaRequest):
     if not request.consulta.strip():
@@ -1145,6 +1172,9 @@ def endpoint_recomendar(request: ConsultaRequest):
         for r in restaurantes:
             r.pop("_pct_positivo", None)
             r.pop("_avg_estrellas", None)
+
+        # Guardar en log
+        _guardar_log(request.consulta, respuesta, restaurantes)
 
         return RecomendacionResponse(
             respuesta=respuesta,
