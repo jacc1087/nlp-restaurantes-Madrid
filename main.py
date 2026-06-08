@@ -341,8 +341,28 @@ def _detectar_zona(consulta: str) -> Optional[tuple]:
             for nombre, coords in ZONAS_MADRID.items():
                 if zona_raw in nombre or nombre in zona_raw:
                     return coords
-            # 3. Geocodificar como calle de Madrid
-            if len(zona_raw) >= 4:
+            # 3. Geocodificar como calle de Madrid — solo si parece una calle real
+            # Evitar geocodificar frases como "comer buen pulpo", "restaurante italiano"
+            # Palabras que nunca son zonas geográficas
+            PALABRAS_NO_ZONA = {
+                'comer','buen','buena','buenos','buenas','pulpo','croquetas',
+                'paella','pizza','sushi','ramen','cachopo','fabada','ceviche',
+                'tapas','pasta','arroz','carne','pescado','marisco','mariscos',
+                'restaurante','cocina','comida','sitio','lugar','cerca','donde',
+                'italiano','japones','peruano','gallego','vasco','mexicano',
+                'italiano','francesa','griega','india','arabe','venezolana',
+                'bueno','rico','rica','especial','tipico','tipica','autentico',
+                'moderno','moderna','tradicional','casero','casera',
+            }
+            # También descartar si el texto capturado es un plato conocido
+            from itertools import chain
+            todos_platos_conocidos = set(chain.from_iterable(
+                v for v in PLATOS_COCINA.values()
+            )) if 'PLATOS_COCINA' in dir() else set()
+            palabras_zona = set(zona_raw.split())
+            es_plato = any(zona_raw in p or p in zona_raw
+                          for p in todos_platos_conocidos) if todos_platos_conocidos else False
+            if len(zona_raw) >= 4 and not palabras_zona.intersection(PALABRAS_NO_ZONA) and not es_plato:
                 coords = _geocodificar_calle(zona_raw)
                 if coords:
                     return coords
@@ -890,6 +910,11 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "recomendable_en_pareja":       criterio_romantico,
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
+        # Personal destacado y valoración de servicio
+        "personal_destacado":           str(row.get("personal_destacado", "") or ""),
+        "servicio_frases":              str(row.get("servicio_frases", "") or ""),
+        "servicio_pos":                 float(row.get("servicio_pos", 0) or 0),
+        "servicio_menciones":           float(row.get("servicio_menciones", 0) or 0),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
@@ -921,7 +946,16 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     df = df_global.copy()
     consulta_norm = _norm(consulta)
-    tokens = [t for t in re.split(r'[\s,.()/\-]+', consulta_norm) if len(t) >= 3]
+    # Filtrar tokens que no aportan información de búsqueda
+    TOKENS_BASURA = {
+        'restaurante','restaurantes','donde','comer','quiero','busco','buscar',
+        'buen','buena','buenos','buenas','mejor','mejores','rico','rica',
+        'sitio','lugar','alguno','alguna','hay','para','que','con','una','uno',
+        'tipo','clase','algo','cerca','aqui','alli','puedo','pueda','ir','ver',
+        'necesito','tengo','ganas','apetece','recomiendas','recomienda',
+    }
+    tokens = [t for t in re.split(r'[\s,.()/\-]+', consulta_norm)
+              if len(t) >= 3 and t not in TOKENS_BASURA]
 
     # Detectar intención
     cocina = _detectar_cocina(consulta)
