@@ -74,8 +74,11 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         "sitio para ir con niños → apto para niños\n"
         "algo con terraza → con terraza\n"
         "sitios conocidos de madrid → restaurantes famosos\n"
-        "quiero comida vasca → cocina vasca\n"
-        "un buen peruano → cocina peruana\n"
+        "quiero cocido madrileño → cocido madrileño\n"
+        "busco un restaurante castizo → cocina madrileña\n"
+        "quiero callos a la madrileña → callos\n"
+        "quiero gallinejas → gallinejas\n"
+        "me apetece oreja a la plancha → oreja\n"
         "quiero un asador → asador\n"
         "me apetece un chuletón → chuletón\n"
         "quiero comer carne a la brasa → asador\n"
@@ -599,6 +602,12 @@ SINONIMOS_COCINA = {
     "madrileno": "madrileña", "madrilena": "madrileña",
     "madrileño": "madrileña", "madrileña": "madrileña",
     "cocido": "madrileña", "cocido madrileño": "madrileña", "callos": "madrileña",
+    "oreja": "madrileña", "oreja a la plancha": "madrileña",
+    "gallinejas": "madrileña", "entresijos": "madrileña",
+    "caracoles": "madrileña", "sesos": "madrileña",
+    "manitas": "madrileña", "manitas de cerdo": "madrileña",
+    "cocina castiza": "madrileña", "castizo": "madrileña", "castiza": "madrileña",
+    "taberna castiza": "madrileña", "cocina madrileña": "madrileña",
     # Asturiana
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
     "cachopo": "asturiana", "fabada": "asturiana", "sidra": "asturiana",
