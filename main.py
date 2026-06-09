@@ -653,6 +653,23 @@ SINONIMOS_COCINA = {
     "arroz": "arroceria", "arroces": "arroceria",
     "arroz con bogavante": "arroceria", "arroz negro": "arroceria",
     "fideuá": "arroceria", "fideua": "arroceria",
+    # Andaluza
+    "andaluz": "andaluza", "andaluza": "andaluza", "andalucia": "andaluza",
+    "andalucía": "andaluza", "sevilla": "andaluza", "sevillano": "andaluza",
+    "gaditano": "andaluza", "gaditana": "andaluza", "cadiz": "andaluza",
+    "jerez": "andaluza", "malaga": "andaluza", "cordoba": "andaluza",
+    "pescaito": "andaluza", "pescaito frito": "andaluza",
+    "tortillitas de camarones": "andaluza", "ajoblanco": "andaluza",
+    "berenjenas con miel": "andaluza", "cola de toro": "andaluza",
+    "salmorejo": "andaluza",
+    # Catalana
+    "catalan": "catalana", "catalana": "catalana", "cataluna": "catalana",
+    "cataluña": "catalana", "barcelona": "catalana",
+    # Taberna / Tapas
+    "taberna": "taberna", "tapas": "taberna", "de tapas": "taberna",
+    "bar de tapas": "taberna", "tasca": "taberna", "tasquita": "taberna",
+    "vermut": "taberna", "vermú": "taberna", "vermuth": "taberna",
+    "pinchos": "taberna",
     # Mediterránea
     "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
     # Fusión / Alta cocina
