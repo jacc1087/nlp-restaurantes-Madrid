@@ -25,7 +25,6 @@ import ast
 from typing import List, Optional
 
 import pandas as pd
-import urllib.request as _ureq
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -40,77 +39,6 @@ ARCHIVO_RANKING  = os.path.join(BASE_DIR, "ranking.csv")
 CACHE_COORDS    = os.path.join(BASE_DIR, ".cache_coords.json")
 
 SOL_COORDS = (40.4168, -3.7038)  # Puerta del Sol — referencia de centro
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# GEMINI — NORMALIZADOR DE CONSULTAS
-# ═══════════════════════════════════════════════════════════════════════════════
-
-_GEMINI_KEY   = os.environ.get("GEMINI_API_KEY", "")
-_GEMINI_MODEL = "gemini-2.5-flash"
-
-def _normalizar_consulta_gemini(consulta: str) -> str:
-    """
-    Usa Gemini para interpretar la consulta del usuario y normalizarla
-    a términos que el motor de búsqueda entiende bien.
-    Si Gemini no está disponible o falla, devuelve la consulta original.
-    """
-    if not _GEMINI_KEY or not consulta.strip():
-        return consulta
-
-    prompt = (
-        "Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA.\n\n"
-        "EJEMPLOS (entrada → salida):\n"
-        "quiero comer comida gallega → cocina gallega\n""quiero un restaurante gallego → cocina gallega\n""un buen restaurante italiano → cocina italiana\n""me apetece un chino → cocina china\n"
-        "me apetece un italiano → cocina italiana\n"
-        "un japonés auténtico → cocina japonesa\n"
-        "quiero comer croquetas → croquetas\n"
-        "donde comer cachopo → cachopo\n"
-        "croquetas cerca de malasaña → croquetas cerca de malasaña\n"
-        "carne en lavapiés → carne en lavapiés\n"
-        "algo romántico para cenar → romántico\n"
-        "sitio para ir con niños → apto para niños\n"
-        "algo con terraza → con terraza\n"
-        "sitios conocidos de madrid → restaurantes famosos\n"
-        "quiero comida vasca → cocina vasca\n"
-        "un buen peruano → cocina peruana\n\n"
-        "REGLAS:\n"
-        "- Cocina/gastronomía de un país o región: SIEMPRE devuelve 'cocina X' (cocina gallega, cocina italiana...)\n"
-        "- Plato concreto: solo el nombre del plato\n"
-        "- Si hay zona: consérvala\n"
-        "- NO añadas nada que no esté en la consulta\n\n"
-        f"Consulta: {consulta!r}\n\n"
-        "Responde SOLO con la versión normalizada, sin comillas."
-    )
-
-    try:
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0, "maxOutputTokens": 100, "stopSequences": []},
-            "safetySettings": [],
-        }
-        data = json.dumps(payload).encode()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
-        req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-        resp = _ureq.urlopen(req, timeout=10)
-        raw = resp.read().decode("utf-8")
-        result = json.loads(raw)
-        candidates = result.get("candidates", [])
-        if not candidates:
-            print(f"  [Gemini] sin candidatos: {raw[:200]}")
-            return consulta
-        parts = candidates[0].get("content", {}).get("parts", [])
-        if not parts:
-            print(f"  [Gemini] sin parts: {str(candidates[0])[:200]}")
-            return consulta
-        normalizada = "".join(p.get("text", "") for p in parts).strip()
-        # Seguridad: si la respuesta es muy larga o rara, usar la original
-        if normalizada and len(normalizada) < 200 and len(normalizada) > 2:
-            print(f"  [Gemini] '{consulta}' → '{normalizada}'")
-            return normalizada
-    except Exception as e:
-        print(f"  [Gemini normalizer] error: {e}")
-
-    return consulta
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ESTADO GLOBAL
@@ -363,42 +291,15 @@ def _norm(s: str) -> str:
     return "".join(c for c in s if unicodedata.category(c) != "Mn")
 
 
-# Caché en memoria para geocodificación de calles (evita llamadas repetidas)
-_geocode_cache: dict = {}
-
-def _geocodificar_calle(texto: str) -> Optional[tuple]:
-    """Geocodifica una calle o lugar de Madrid usando Nominatim (OpenStreetMap)."""
-    if texto in _geocode_cache:
-        return _geocode_cache[texto]
-    try:
-        import urllib.request, json as _json, urllib.parse
-        query = urllib.parse.quote(f"{texto}, Madrid, España")
-        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1&countrycodes=es"
-        req = urllib.request.Request(url, headers={"User-Agent": "RestaurantesMadridTFM/1.0"})
-        with urllib.request.urlopen(req, timeout=3) as r:
-            data = _json.loads(r.read())
-        if data:
-            coords = (float(data[0]["lat"]), float(data[0]["lon"]))
-            _geocode_cache[texto] = coords
-            print(f"  [geocode] '{texto}' → {coords}")
-            return coords
-    except Exception as e:
-        print(f"  [geocode] error: {e}")
-    _geocode_cache[texto] = None
-    return None
-
 def _detectar_zona(consulta: str) -> Optional[tuple]:
-    """Detecta si la consulta menciona una zona de Madrid y devuelve sus coordenadas.
-    Si no está en el diccionario de zonas, intenta geocodificar la calle con Nominatim."""
+    """Detecta si la consulta menciona una zona de Madrid y devuelve sus coordenadas."""
     c = _norm(consulta)
-    # Patrones de extracción de zona/calle
+    # Patrones de extracción de zona
     patrones = [
         r'cerca de(?:l| la| los| las)?\s+([\w\s]+?)(?:\s+y|\s+quiero|\s+busco|\s+que|,|\.|$)',
         r'estoy en\s+([\w\s]+?)(?:\s+y|\s+quiero|\s+busco|,|\.|$)',
-        r'calle\s+([\w\s]{2,30}?)(?:\s+quiero|\s+busco|\s+que|,|\.|$)',
-        r'por la calle\s+([\w\s]{2,30}?)(?:\s+quiero|\s+busco|,|\.|$)',
-        r'por\s+([\w\s]{3,20}?)(?:\s+quiero|\s+busco|,|\.|$)',
         r'en\s+([\w\s]{3,30}?)(?:\s+quiero|\s+busco|\s+que|,|\.|$)',
+        r'por\s+([\w\s]{3,20}?)(?:\s+quiero|\s+busco|,|\.|$)',
         r'barrio de\s+([\w\s]+?)(?:,|\.|$)',
         r'zona de\s+([\w\s]+?)(?:,|\.|$)',
     ]
@@ -406,39 +307,14 @@ def _detectar_zona(consulta: str) -> Optional[tuple]:
         m = re.search(patron, c)
         if m:
             zona_raw = m.group(1).strip()
-            # 1. Buscar exacto en diccionario
+            # Buscar en diccionario
             if zona_raw in ZONAS_MADRID:
                 return ZONAS_MADRID[zona_raw]
-            # 2. Búsqueda parcial en diccionario
+            # Búsqueda parcial
             for nombre, coords in ZONAS_MADRID.items():
                 if zona_raw in nombre or nombre in zona_raw:
                     return coords
-            # 3. Geocodificar como calle de Madrid — solo si parece una calle real
-            # Evitar geocodificar frases como "comer buen pulpo", "restaurante italiano"
-            # Palabras que nunca son zonas geográficas
-            PALABRAS_NO_ZONA = {
-                'comer','buen','buena','buenos','buenas','pulpo','croquetas',
-                'paella','pizza','sushi','ramen','cachopo','fabada','ceviche',
-                'tapas','pasta','arroz','carne','pescado','marisco','mariscos',
-                'restaurante','cocina','comida','sitio','lugar','cerca','donde',
-                'italiano','japones','peruano','gallego','vasco','mexicano',
-                'italiano','francesa','griega','india','arabe','venezolana',
-                'bueno','rico','rica','especial','tipico','tipica','autentico',
-                'moderno','moderna','tradicional','casero','casera',
-            }
-            # También descartar si el texto capturado es un plato conocido
-            from itertools import chain
-            todos_platos_conocidos = set(chain.from_iterable(
-                v for v in PLATOS_COCINA.values()
-            )) if 'PLATOS_COCINA' in dir() else set()
-            palabras_zona = set(zona_raw.split())
-            es_plato = any(zona_raw in p or p in zona_raw
-                          for p in todos_platos_conocidos) if todos_platos_conocidos else False
-            if len(zona_raw) >= 4 and not palabras_zona.intersection(PALABRAS_NO_ZONA) and not es_plato:
-                coords = _geocodificar_calle(zona_raw)
-                if coords:
-                    return coords
-    # Búsqueda directa en texto (diccionario)
+    # Búsqueda directa en texto
     for nombre, coords in sorted(ZONAS_MADRID.items(), key=lambda x: -len(x[0])):
         if nombre in c:
             return coords
@@ -548,24 +424,24 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
-    "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
-    "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
-    "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa",
-    "indio": "india", "india": "india", "hindu": "india",
-    "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
+    "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    "italiano": "italiana", "italia": "italiana",
+    "japones": "japonesa", "japon": "japonesa",
+    "indio": "india", "hindu": "india", "india": "india",
+    "peruano": "peruana", "peru": "peruana",
     "espanol": "española", "espanola": "española",
-    "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
-    "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
-    "frances": "francesa", "francesa": "francesa", "francia": "francesa",
-    "griego": "griega", "griega": "griega", "grecia": "griega",
+    "asturiano": "asturiana", "asturias": "asturiana",
+    "gallego": "gallega", "galicia": "gallega",
+    "vasco": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
+    "frances": "francesa", "francia": "francesa",
+    "griego": "griega", "grecia": "griega",
     "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
-    "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
-    "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
-    "chino": "china", "china": "china",
-    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
-    "americano": "americana", "americana": "americana", "usa": "americana",
-    "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+    "venezolano": "venezolana", "venezuela": "venezolana",
+    "colombiano": "colombiana", "colombia": "colombiana",
+    "chino": "china",
+    "tailandes": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
+    "americano": "americana", "usa": "americana",
+    "mediterraneo": "mediterranea",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -587,64 +463,11 @@ INTENCIONES_CRITERIO = {
 }
 
 
-# IDs de restaurantes icónicos/famosos de Madrid — selección manual por notoriedad
-# Combina: estrellas Michelin, alta popularidad en Google, referentes culturales
-RESTAURANTES_ICONICOS = {
-    70,   # DiverXO
-    40,   # DSTAGE
-    128,  # Coque
-    130,  # StreetXO
-    132,  # Corral de la Morería
-    125,  # Dans Le Noir ?
-    95,   # Bacira
-    75,   # sr.Ito
-    62,   # La Tasqueria de Javi Estevez
-    156,  # Juana La Loca
-    24,   # Rosi La Loca
-    74,   # Bestial By Rosi La Loca
-    85,   # Angelita Madrid
-    131,  # La Castela
-    103,  # Casa Benigna
-    1,    # Los Montes de Galicia
-    9,    # Inclán Brutal Bar
-    6,    # Tabernas El Sur
-    86,   # Casa Lucas
-    154,  # Dantxari
-    155,  # Casa Toni
-}
-
-PALABRAS_FAMOSOS = [
-    "famoso", "famosa", "famosos", "famosas",
-    "conocido", "conocida", "conocidos", "conocidas",
-    "popular", "populares",
-    "iconico", "iconica", "iconicos",
-    "referente", "referentes",
-    "top madrid", "lo mejor de madrid", "imprescindible", "imprescindibles",
-    "estrella michelin", "michelin", "con estrella",
-    "de moda", "trendy", "instagram",
-    "recomendado", "muy recomendado",
-    "especial", "unico", "unica",
-    "gastro", "gastronomico", "gastronomica",
-    "experiencia", "experiencia unica",
-    "must", "must do", "hay que ir",
-]
-
-def _detectar_famosos(consulta: str) -> bool:
-    """Detecta si el usuario busca restaurantes famosos/icónicos/conocidos."""
-    c = _norm(consulta)
-    return any(p in c for p in PALABRAS_FAMOSOS)
-
-
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
-    padded = " " + c + " "
-    # Prefijos que preceden al tipo de cocina ("comida X", "restaurante X", "cocina X")
-    for prefijo in ["comida ", "restaurante ", "cocina ", "cuisine "]:
-        for sinonimo, cocina in SINONIMOS_COCINA.items():
-            if prefijo + sinonimo in c:
-                return cocina
     # Buscar sinónimos como palabras completas
     for sinonimo, cocina in SINONIMOS_COCINA.items():
+        padded = " " + c + " "
         if (f" {sinonimo} " in padded or c == sinonimo
                 or c.startswith(sinonimo + " ") or c.endswith(" " + sinonimo)):
             return cocina
@@ -678,181 +501,206 @@ def _parsear_platos_str(platos_str: str) -> list:
 
 def _score_cocina(row: pd.Series, cocina: str) -> float:
     """
-    Score de afinidad con una cocina basado en criterios estrictos.
-    Un restaurante necesita al menos MIN_PLATOS_COCINA platos del listado
-    de esa cocina para puntuar. Sin mínimo → score 0.
-    """
-    MIN_PLATOS_COCINA = 3
+    Score de afinidad con una cocina.
 
-    PLATOS_COCINA = {
-        "gallega":     ["pulpo", "empanada", "percebes", "navajas", "vieiras", "berberechos",
-                        "zamburinas", "caldo gallego", "lacon", "grelos", "padron", "filloas",
-                        "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
-        "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "ossobuco", "panna cotta",
-                        "risotto", "tagliatelle", "pappardelle", "gnocchi", "cannoli", "arancini",
-                        "burrata", "stracciatella", "tiramisu", "lasana", "lasaña", "pasta", "pizza",
-                        "bruschetta", "focaccia", "ribollita"],
-        "peruana":     ["lomo saltado", "lomo salteado", "causa", "anticuchos", "chaufa",
-                        "aji de gallina", "leche de tigre", "tiradito", "ceviche",
-                        "pachamanquero", "chicharron peruano"],
-        "japonesa":    ["ramen", "sushi", "sashimi", "gyozas", "tempura", "udon", "mochi",
-                        "katsu", "takoyaki", "tonkatsu", "nigiri", "yakitori", "edamame",
-                        "miso", "soba"],
-        "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro", "marmitako",
-                        "kokotxas", "txakoli", "chipirones en su tinta", "merluza en salsa verde",
-                        "bacalao", "merluza", "anchoas"],
-        "asturiana":   ["cachopo", "fabada", "oricios", "pote asturiano", "cabrales",
-                        "casadielles", "sidra"],
-        "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal", "tandoori",
-                        "chapati", "pakora", "butter chicken", "palak paneer", "chana masala",
-                        "lassi", "dosa", "saag"],
-        "venezolana":  ["arepa", "arepas", "pabellon criollo", "cachapa", "hallaca", "pernil",
-                        "caraotas", "tequeños", "mandocas", "chicha"],
-        "mexicana":    ["burrito", "quesadilla", "fajitas", "guacamole", "enchilada", "pozole",
-                        "carnitas", "mole", "tacos", "chilaquiles", "chile relleno", "tamales",
-                        "tostadas", "nachos"],
-        "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki", "baklava",
-                        "dolmades", "kleftiko", "taramasalata", "hummus"],
-        "francesa":    ["foie gras", "confit de pato", "bouillabaisse", "coq au vin", "escargots",
-                        "crepe", "souffle", "cassoulet", "magret", "ratatouille", "tartare"],
-        "arabe":       ["shawarma", "falafel", "tabule", "baba ganoush", "labneh", "shakshuka",
-                        "kibbeh", "fattoush", "couscous", "pita", "hummus", "kebab"],
+    Lógica de dos capas para evitar falsos positivos:
+
+    1. Platos PROPIOS: muy identificativos de esa cocina (zamburiñas → gallega,
+       ramen → japonesa, tikka masala → india...). Cada uno suma fuerte.
+
+    2. Platos COMUNES: presentes en esa cocina pero también en muchas otras
+       (pulpo, empanada, pasta...). Solo suman si hay al menos 1 plato propio
+       o un nombre de restaurante que evoque la cocina.
+
+    Umbral de entrada: el restaurante necesita al menos MIN_SEÑALES_PROPIAS
+    señales de platos propios, O tener nombre_bonus + al menos 1 plato
+    (propio o común). Sin eso, score = 0.
+    """
+    MIN_SEÑALES_PROPIAS = 2  # mínimo de platos propios para puntuar sin nombre_bonus
+
+    # Platos propios (muy identificativos) y comunes (necesitan contexto)
+    PLATOS_PROPIOS = {
+        "gallega":     ["zamburinas", "zamburiñas", "percebes", "navajas", "vieiras",
+                        "berberechos", "caldo gallego", "lacon", "grelos", "padron",
+                        "filloas", "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
+        "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
+                        "marmitako", "kokotxas", "txakoli", "chipirones en su tinta",
+                        "bacalao al pil pil", "merluza en salsa verde", "pil pil"],
+        "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
+                        "cabrales", "casadielles", "sidra"],
+        "japonesa":    ["ramen", "gyozas", "edamame", "udon", "yakitori", "mochi", "katsu",
+                        "takoyaki", "tonkatsu", "nigiri", "onigiri", "okonomiyaki",
+                        "miso ramen", "soba", "sashimi", "tempura ebi"],
+        "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal",
+                        "tandoori", "chapati", "pakora", "butter chicken", "palak paneer",
+                        "chana masala", "lassi", "dosa", "saag"],
+        "peruana":     ["lomo saltado", "lomo salteado", "causa limena", "anticuchos",
+                        "arroz chaufa", "aji de gallina", "leche de tigre",
+                        "ceviche amazonico", "ceviche pacha", "pachamanquero",
+                        "suspiro limeno", "chicharron peruano", "tiradito"],
+        "venezolana":  ["arepas", "arepa", "pabellon criollo", "cachapa", "cachapas",
+                        "hallaca", "pernil", "caraotas", "tequeños", "mandocas", "chicha"],        "mexicana":    ["burrito", "quesadilla", "fajitas", "enchilada", "pozole",
+                        "carnitas", "mole", "tacos cochinita", "tacos pastor", "chilaquiles",
+                        "chile relleno", "tamales", "tostadas", "tlayudas"],
+        "griega":      ["gyros", "souvlaki", "moussaka", "spanakopita", "tzatziki",
+                        "baklava", "dolmades", "kleftiko", "taramasalata"],
+        "italiana":    ["carbonara", "cacio e pepe", "amatriciana", "ossobuco",
+                        "panna cotta", "risotto funghi", "tagliatelle ragu", "pappardelle",
+                        "gnocchi", "cannoli", "ribollita", "arancini", "burrata",
+                        "stracciatella", "saltimbocca", "pizza napolitana"],
+        "francesa":    ["foie gras", "confit de pato", "bouillabaisse", "coq au vin",
+                        "escargots", "crepe suzette", "soufflé", "cassoulet", "magret"],
+        "arabe":       ["shawarma", "falafel", "tabule", "baba ganoush", "labneh",
+                        "shakshuka", "kibbeh", "fattoush", "couscous", "pita"],
         "colombiana":  ["bandeja paisa", "ajiaco", "sancocho", "changua", "lechona",
-                        "tamales colombianos", "arepa"],
-        "china":       ["dim sum", "wonton", "pato pekin", "chow mein", "baozi", "mapo tofu",
-                        "pato laqueado", "dumplings", "spring roll"],
-        "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde", "curry rojo", "satay",
-                        "som tam", "larb", "mango sticky rice", "khao pad"],
+                        "tamales colombianos"],
+        "china":       ["dim sum", "wonton", "pato pekin", "chow mein", "baozi",
+                        "mapo tofu", "pato laqueado"],
+        "tailandesa":  ["pad thai", "tom yum", "massaman", "curry verde thai",
+                        "curry rojo thai", "satay", "som tam", "larb", "mango sticky rice"],
         "americana":   ["smash burger", "pulled pork", "costillas bbq", "mac and cheese",
-                        "chicken wings", "brisket", "coleslaw", "brownie", "costillar"],
-        "española":    ["cocido madrileno", "fabada", "croquetas", "tortilla", "rabo de toro",
-                        "callos", "oreja", "patatas bravas", "gazpacho", "salmorejo", "paella",
-                        "jamon", "chorizo", "pisto"],
+                        "chicken wings", "brisket", "coleslaw", "corn dog"],
+        "española":    ["cocido madrileno", "fabada", "pisto manchego", "croquetas jamon",
+                        "tortilla española", "rabo de toro", "callos madrilenos", "oreja",
+                        "patatas bravas", "gazpacho", "salmorejo"],
+        "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
+                         "couscous marroqui", "tajine", "merguez", "harira"],
+    }
+    # Platos que aparecen en múltiples cocinas — solo cuentan con contexto
+    PLATOS_COMUNES = {
+        "gallega":    ["pulpo", "empanada", "berberechos", "mejillones", "almejas"],
+        "vasca":      ["bacalao", "merluza", "anchoas"],
+        "italiana":   ["lasana", "lasaña", "bruschetta", "focaccia", "tiramisu",
+                       "risotto", "pasta", "pizza"],
+        "japonesa":   ["sushi", "tempura", "gyozas"],
+        "peruana":    ["ceviche"],
+        "mexicana":   ["tacos", "guacamole", "nachos"],
+        "española":   ["paella", "chuleton", "jamón", "chorizo"],
+        "francesa":   ["ratatouille", "tartare", "foie", "crepe"],
+        "arabe":      ["hummus", "kebab"],
+        "venezolana": ["pabellon", "chicha"],
+        "americana":  ["brownie", "costillar"],
     }
 
-    platos_def = PLATOS_COCINA.get(cocina, [])
-    if not platos_def:
-        return 0.0
+    propios_def = PLATOS_PROPIOS.get(cocina, [])
+    comunes_def = PLATOS_COMUNES.get(cocina, [])
 
     fuente = _norm(
         str(row.get("todos_platos", "") or "") + " " +
-        str(row.get("terminos_tfidf", "") or "")
+        str(row.get("terminos_tfidf", "") or "") + " " +
+        str(row.get("nombre_display", "") or "") + " " +
+        str(row.get("nombre", "") or "")
     )
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
 
-    # Contar platos distintos que coinciden
-    matches = []
-    score = 0.0
-    for plato in platos_def:
-        if _norm(plato) in fuente:
+    # Bonus por nombre del restaurante (señal muy fuerte)
+    NOMBRES_COCINA = {
+        "peruana":    ["tampu", "kausa", "peru", "lima", "inca"],
+        "mexicana":   ["mexico", "mexicana", "taco", "azteca"],
+        "japonesa":   ["japon", "sushi", "ramen", "tokyo", "osaka", "sibuya", "nikkei"],
+        "italiana":   ["italia", "trattoria", "osteria", "pizzeria", "pasta"],
+        "vasca":      ["euskal", "pintxo", "bilbao", "donosti", "txoko"],
+        "gallega":    ["galicia", "galleg", "santiag", "marisqueria", "marisquer"],
+        "asturiana":  ["astur", "asturias", "sidrer"],
+        "griega":     ["grecia", "greek", "atenas", "hellas"],
+        "arabe":      ["lebanese", "arab", "libano", "siria", "halal"],
+        "venezolana": ["venezuela", "venezolan", "arepa"],
+        "colombiana": ["colombia", "colombian"],
+        "china":      ["china", "canton", "pekin", "shangai", "dragon"],
+        "tailandesa": ["thai", "tailand", "bangkok", "siam"],
+        "americana":  ["burger", "bbq", "smokehouse", "diner"],
+        "española":   ["taberna", "meson", "mesón", "bodega", "tasca"],
+    }
+    nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
+    nombre_bonus = 0.0
+    for hint in NOMBRES_COCINA.get(cocina, []):
+        if hint in nombre_norm:
+            nombre_bonus = 5.0
+            break
+
+    # Bonus por columna tipo_cocina si existe en el CSV
+    tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
+    cocina_ascii = _norm(cocina)
+    if tipo and (cocina_ascii in tipo or tipo in cocina_ascii):
+        nombre_bonus = max(nombre_bonus, 8.0)
+
+    # Contar platos propios encontrados
+    señales_propias = 0
+    score_propios = 0.0
+    for plato in propios_def:
+        plato_norm = _norm(plato)
+        if plato_norm in fuente:
+            señales_propias += 1
+            score_propios += 3.0
             po = next(
                 (p for p in platos_lista
-                 if _norm(plato) in _norm(p["nombre"]) or _norm(p["nombre"]) in _norm(plato)),
+                 if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
                 None
             )
-            menciones = po["menciones"] if po else 1
-            matches.append({"plato": plato, "menciones": menciones})
-            score += 2.0
-            if menciones > 1:
-                score += math.log2(menciones)
+            if po and po["menciones"] > 1:
+                score_propios += math.log2(po["menciones"])
 
-    # Criterio estricto: mínimo MIN_PLATOS_COCINA platos
-    if len(matches) < MIN_PLATOS_COCINA:
+    # Platos comunes: solo suman si hay contexto (platos propios O nombre_bonus)
+    score_comunes = 0.0
+    tiene_contexto = señales_propias >= MIN_SEÑALES_PROPIAS or nombre_bonus > 0
+    if tiene_contexto:
+        for plato in comunes_def:
+            plato_norm = _norm(plato)
+            if plato_norm in fuente:
+                score_comunes += 1.5
+                po = next(
+                    (p for p in platos_lista
+                     if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
+                    None
+                )
+                if po and po["menciones"] > 1:
+                    score_comunes += math.log2(po["menciones"]) * 0.5
+
+    # Sin contexto y sin nombre_bonus → score 0 (evita falsos positivos)
+    if not tiene_contexto:
         return 0.0
 
-    # Filtro de relevancia: los platos deben ser reales, no menciones anecdóticas.
-    # Pasa si: al menos 2 platos con >1 mención, O un plato estrella con >8 menciones
-    con_menciones = sum(1 for m in matches if m["menciones"] > 1)
-    plato_estrella = any(m["menciones"] > 8 for m in matches)
-    if con_menciones < 2 and not plato_estrella:
-        return 0.0
-
-    # Filtro de especialización: las menciones de platos de esta cocina deben representar
-    # al menos el 35% del total de menciones del restaurante.
-    # Evita que restaurantes fusión con platos de muchas cocinas aparezcan como especialistas.
-    total_menciones_restaurante = sum(
-        p["menciones"] for p in platos_lista
-    )
-    menciones_cocina = sum(m["menciones"] for m in matches)
-    if total_menciones_restaurante > 0:
-        proporcion = menciones_cocina / total_menciones_restaurante
-        if proporcion < 0.35:
-            return 0.0
-
-    return round(score, 2)
+    return round(score_propios + score_comunes + nombre_bonus, 2)
 
 
 def _score_texto(row: pd.Series, tokens_query: list) -> float:
-    """
-    Score de coincidencia para búsquedas de plato específico.
-    Si el token coincide con un plato en todos_platos, exige MIN_MENCIONES_PLATO
-    menciones para puntuar — evita devolver restaurantes donde ese plato apareció
-    una sola vez de pasada en una reseña.
-    """
-    MIN_MENCIONES_PLATO = 3  # mínimo de menciones para considerar el plato como real
-
-    platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
-    nombre_display = _norm(str(row.get("nombre_display", "") or ""))
-
+    """Score de coincidencia de tokens de consulta contra platos/términos del restaurante."""
+    fuente = _norm(
+        str(row.get("todos_platos", "") or "") + " " +
+        str(row.get("terminos_tfidf", "") or "") + " " +
+        str(row.get("nombre_display", "") or "")
+    )
     score = 0.0
     for qt in tokens_query:
         if len(qt) < 3:
             continue
-
-        # Buscar el token en los platos del restaurante
-        po = next(
-            (p for p in platos_lista
-             if qt in _norm(p["nombre"]) or _norm(p["nombre"]) in qt),
-            None
-        )
-
-        if po:
-            # Coincide con un plato: exigir mínimo de menciones
-            if po["menciones"] >= MIN_MENCIONES_PLATO:
-                score += 2.0 + math.log2(po["menciones"])
-            # Con pocas menciones no puntúa — el plato no es representativo
-        else:
-            # No está en todos_platos: buscar en terminos_tfidf o nombre
-            fuente_sec = _norm(
-                str(row.get("terminos_tfidf", "") or "") + " " + nombre_display
-            )
-            if qt in fuente_sec:
-                score += 1.0  # coincidencia débil (término genérico o nombre)
-
+        if qt in fuente:
+            score += 2.0
+            # Bonus por menciones
+            platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
+            po = next((p for p in platos_lista if qt in _norm(p["nombre"]) or _norm(p["nombre"]) in qt), None)
+            if po and po["menciones"] > 1:
+                score += math.log2(po["menciones"])
     return score
 
 
 def _score_calidad(row: pd.Series) -> float:
     """
-    Score de calidad combinado 0-10.
+    Score de calidad combinado 0-10 — idéntico a calcular_score_ranking del Proyecto A
+    pero usando columnas del Proyecto B.
 
-    Pesos base:
-      35% — valoración Google bayesiana (ponderada por nº de votaciones)
+    Pesos:
+      35% — valoración Google (0-5 → 0-10)
       35% — % reseñas positivas (nlptown)
       30% — avg_estrellas_modelo (nlptown, 1-5 → 0-10)
-
-    La valoración Google se pondera bayesianamente: un restaurante con pocas
-    votaciones se acerca a la media global (prior = 4.3, m = 500 votos).
-    Esto evita que un 4.9 con 200 votos supere a un 4.7 con 10.000.
     """
-    # ── Valoración Google bayesiana ───────────────────────────────
-    PRIOR_MEDIA = 4.3   # media global estimada del conjunto
-    PRIOR_VOTOS = 500   # peso del prior: equivale a N votos "ficticios" en la media
+    val = float(row.get("valoracion_display", 0) or 0)
+    val_norm = (val / 5.0) * 10
 
-    val_raw  = float(row.get("valoracion_display", 0) or 0)
-    votos    = float(row.get("votaciones", 0) or 0)
+    pct_pos = float(row.get("pct_positivo", 0) or 0)  # ya es 0-100
 
-    if votos > 0 and val_raw > 0:
-        val_bay = (PRIOR_VOTOS * PRIOR_MEDIA + votos * val_raw) / (PRIOR_VOTOS + votos)
-    else:
-        val_bay = PRIOR_MEDIA  # sin votos → asignar media
-
-    val_norm = (val_bay / 5.0) * 10
-
-    # ── NLP ───────────────────────────────────────────────────────
-    pct_pos  = float(row.get("pct_positivo", 0) or 0)   # 0-100
-    avg_est  = float(row.get("avg_estrellas_modelo", 3) or 3)
-    avg_norm = ((avg_est - 1) / 4.0) * 10               # 1-5 → 0-10
+    avg_est = float(row.get("avg_estrellas_modelo", 3) or 3)
+    avg_norm = ((avg_est - 1) / 4.0) * 10  # 1-5 → 0-10
 
     return round(val_norm * 0.35 + pct_pos / 10.0 * 0.35 + avg_norm * 0.30, 2)
 
@@ -982,11 +830,6 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "recomendable_en_pareja":       criterio_romantico,
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
-        # Personal destacado y valoración de servicio
-        "personal_destacado":           "" if str(row.get("personal_destacado", "") or "").strip() in ("", "nan", "NaN", "None") else str(row.get("personal_destacado", "")),
-        "servicio_frases":              str(row.get("servicio_frases", "") or ""),
-        "servicio_pos":                 float(row.get("servicio_pos", 0) or 0),
-        "servicio_menciones":           float(row.get("servicio_menciones", 0) or 0),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
@@ -1018,35 +861,12 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     df = df_global.copy()
     consulta_norm = _norm(consulta)
-    # Filtrar tokens que no aportan información de búsqueda
-    TOKENS_BASURA = {
-        'restaurante','restaurantes','donde','comer','quiero','busco','buscar',
-        'buen','buena','buenos','buenas','mejor','mejores','rico','rica',
-        'sitio','lugar','alguno','alguna','hay','para','que','con','una','uno',
-        'tipo','clase','algo','cerca','aqui','alli','puedo','pueda','ir','ver',
-        'necesito','tengo','ganas','apetece','recomiendas','recomienda',
-    }
-    tokens = [t for t in re.split(r'[\s,.()/\-]+', consulta_norm)
-              if len(t) >= 3 and t not in TOKENS_BASURA]
+    tokens = [t for t in re.split(r'[\s,.()/\-]+', consulta_norm) if len(t) >= 3]
 
     # Detectar intención
     cocina = _detectar_cocina(consulta)
     zona_coords = _detectar_zona(consulta)
     criterios = _detectar_criterios(consulta)
-    famosos = _detectar_famosos(consulta)
-
-    # Si no se detecta nada concreto, usar Gemini para interpretar
-    tokens_tmp = [t for t in __import__('re').split(r'[\s,.()/\-]+', consulta_norm)
-                  if len(t) >= 3 and t not in TOKENS_BASURA]
-    if not cocina and not criterios and not famosos and not tokens_tmp:
-        consulta_norm_gemini = _normalizar_consulta_gemini(consulta)
-        if consulta_norm_gemini != consulta:
-            consulta = consulta_norm_gemini
-            consulta_norm = _norm(consulta)
-            cocina = _detectar_cocina(consulta)
-            zona_coords = zona_coords or _detectar_zona(consulta)
-            criterios = _detectar_criterios(consulta)
-            famosos = _detectar_famosos(consulta)
 
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
@@ -1077,117 +897,47 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df["_dist_zona"] = None
         df["_score_dist"] = 0.0
 
-    # ── Filtrar primero, luego calcular score final ────────────────
+    # ── Score final combinado ──────────────────────────────────────
+    if zona_coords:
+        # Con zona: 40% distancia + 35% calidad + 25% match
+        df["_score_final"] = (
+            df["_score_dist"]   * 0.40 +
+            df["_score_calidad"] * 0.35 +
+            (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.25
+        )
+    elif cocina or df["_score_match"].max() > 4:
+        # Con match de texto/cocina: 50% match + 50% calidad
+        df["_score_final"] = (
+            (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.50 +
+            df["_score_calidad"] * 0.50
+        )
+    else:
+        # Sin match: solo calidad
+        df["_score_final"] = df["_score_calidad"]
+
+    # ── Filtrar por criterios detectados ──────────────────────────
     df_filtrado = df.copy()
-
-    # FILTRO POR FAMOSOS: si busca sitios conocidos/icónicos, filtrar por lista curada
-    if famosos and not cocina:
-        # IDs que siempre aparecen primero por ser landmarks absolutos de Madrid
-        ICONICOS_PRIMERO = [70, 40, 128, 130, 132, 125]  # DiverXO, DSTAGE, Coque, StreetXO, Corral Morería, Dans Le Noir
-        ids_int = df["id_restaurante"].astype(int)
-        mask = ids_int.isin(RESTAURANTES_ICONICOS)
-        if mask.sum() > 0:
-            df_famosos = df[mask].copy()
-            df_famosos["_score_final"] = df_famosos.apply(_score_calidad, axis=1)
-            # Los landmarks fijos van siempre primero con score extra
-            df_famosos["_es_landmark"] = ids_int[mask].isin(ICONICOS_PRIMERO).astype(int) * 100
-            df_famosos["_score_final"] = df_famosos["_score_final"] + df_famosos["_es_landmark"]
-            df_top = df_famosos.sort_values("_score_final", ascending=False).head(8)
-            restaurantes = [_fila_a_restaurante(row) for _, row in df_top.iterrows()]
-            meta = {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": len(df_famosos), "famosos": True, "tokens": tokens}
-            return restaurantes, meta
-
-    # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
-    # Si se pide una cocina específica y un restaurante no tiene >= 4 platos de esa
-    # cocina (_score_match == 0), se excluye sin excepción. No se rellena con
-    # restaurantes genéricos: si no hay ninguno, se devuelve lista vacía.
-    if cocina:
-        df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-        # Si tras el filtro no queda ningún restaurante → devolver vacío inmediatamente
-        if df_filtrado.empty:
-            return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
-
-    # FILTRO PLATO + ZONA: si el usuario busca un plato concreto cerca de una zona,
-    # filtrar primero por los que tienen ese plato, luego ordenar por distancia.
-    # Evita devolver los restaurantes más cercanos que no tienen el plato.
-    if not cocina and zona_coords and tokens:
-        max_match = df["_score_match"].max()
-        if max_match > 0:
-            df_con_plato = df_filtrado[df_filtrado["_score_match"] > 0]
-            if not df_con_plato.empty:
-                df_filtrado = df_con_plato
-            else:
-                return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
-
-    # Filtrar por criterios (terraza, niños, etc.) — solo si hay resultados previos
     for criterio in criterios:
         mascara = df_filtrado.apply(lambda r: _pasa_criterio(r, criterio), axis=1)
-        if mascara.sum() > 0:
+        if mascara.sum() > 0:  # Solo filtrar si hay resultados
             df_filtrado = df_filtrado[mascara]
 
-    # Filtrado por texto específico (sin cocina, sin zona)
-    if not cocina and not zona_coords:
-        max_match = df["_score_match"].max()
-        if max_match > 0:
-            # Hay restaurantes que coinciden con el plato/término buscado
-            df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-            if df_filtrado.empty:
-                # Ninguno pasa el umbral de menciones → devolver vacío, no relleno genérico
-                return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
-        elif tokens:
-            # Se buscó algo específico pero ningún restaurante lo tiene con suficientes menciones
-            return [], {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": 0, "tokens": tokens}
+    # ── Si con filtros quedan pocos, usar sin filtros ──────────────
+    if len(df_filtrado) < 3 and len(criterios) > 0:
+        df_filtrado = df.copy()
 
-    # ── Score final solo sobre los restaurantes filtrados ──────────
-    if zona_coords and cocina:
-        # Cocina + zona: primero se exige cocina (ya filtrado arriba),
-        # luego ordenar por proximidad y dentro de cada distancia por calidad
-        df_filtrado["_dist_bucket"] = (df_filtrado["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
-        df_filtrado["_score_final"] = (
-            -df_filtrado["_dist_bucket"] * 10 +
-            df_filtrado["_score_calidad"] * 1
-        )
-    elif zona_coords:
-        df_filtrado["_dist_bucket"] = (df_filtrado["_dist_zona"] / 0.5).apply(lambda x: round(x) if pd.notna(x) else 999)
-        df_filtrado["_score_final"] = (
-            -df_filtrado["_dist_bucket"] * 10 +
-            df_filtrado["_score_calidad"] * 1
-        )
-    elif cocina:
-        # Solo cocina: ordenar por calidad (el match ya garantiza que son de esa cocina)
-        df_filtrado["_score_final"] = (
-            df_filtrado["_score_match"].clip(0, 10) * 0.40 +
-            df_filtrado["_score_calidad"] * 0.60
-        )
-    elif df_filtrado["_score_match"].max() > 4:
-        df_filtrado["_score_final"] = (
-            (df_filtrado["_score_match"] + df_filtrado["_score_nombre"]).clip(0, 10) * 0.50 +
-            df_filtrado["_score_calidad"] * 0.50
-        )
-    else:
-        df_filtrado["_score_final"] = df_filtrado["_score_calidad"]
-
-    # ── Filtrar por distancia máxima si hay zona ─────────────────
-    if zona_coords and "_dist_zona" in df_filtrado.columns:
-        cerca = df_filtrado[df_filtrado["_dist_zona"] <= 3.0]
-        if len(cerca) >= 3:
-            df_filtrado = cerca
-        elif len(cerca) > 0:
-            # Si hay pocos cerca de 3 km, ampliar a 5 km
-            cerca5 = df_filtrado[df_filtrado["_dist_zona"] <= 5.0]
-            if len(cerca5) >= 3:
-                df_filtrado = cerca5
+    # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
+    if cocina:
+        # Solo incluir restaurantes que superaron el umbral de platos (score > 0)
+        df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
+        if len(df_con_match) >= 3:
+            df_filtrado = df_con_match
+        elif len(df_con_match) > 0:
+            # Si hay menos de 3 con score > 0, los mostramos igualmente (son los únicos relevantes)
+            df_filtrado = df_con_match
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
-    # Si hay búsqueda específica (cocina o plato), devolver solo los que pasan el filtro
-    # sin rellenar con otros — aunque sea 1 solo resultado.
-    # En búsqueda genérica (sin filtros), limitar a 8 para no saturar.
-    if cocina or (tokens and df_filtrado["_score_match"].max() > 0):
-        n_resultados = min(len(df_filtrado), 8)  # máximo 8, pero sin relleno
-    elif criterios:
-        n_resultados = 8
-    else:
-        n_resultados = 8
+    n_resultados = 6 if (cocina or tokens or criterios) else 8
     df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
 
     restaurantes = []
@@ -1202,7 +952,6 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         "zona": zona_coords,
         "criterios": criterios,
         "n_total": len(df_filtrado),
-        "tokens": tokens,
     }
     return restaurantes, meta
 
@@ -1218,19 +967,6 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     No usa LLM — es determinista y rápido.
     """
     if not restaurantes:
-        cocina_vacia = meta.get("cocina")
-        tokens_buscados = meta.get("tokens", [])
-        if cocina_vacia:
-            return (
-                f"No hay ningún restaurante en la base de datos con suficientes platos de cocina {cocina_vacia} "
-                f"(mínimo 3 platos identificados en reseñas). No te devuelvo alternativas genéricas."
-            )
-        if tokens_buscados:
-            plato = " ".join(tokens_buscados)
-            return (
-                f"No he encontrado ningún restaurante donde «{plato}» aparezca con suficientes menciones en reseñas. "
-                f"Puede que ese plato no esté bien representado en los datos o que ningún restaurante lo destaque."
-            )
         return (
             "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
             "Prueba con otros términos: tipo de cocina, plato concreto, zona de Madrid o criterios como terraza, niños, mascotas..."
@@ -1239,36 +975,9 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     cocina    = meta.get("cocina")
     zona      = meta.get("zona")
     criterios = meta.get("criterios", [])
-    famosos   = meta.get("famosos", False)
 
     # Intro contextual
     intro_parts = []
-    if famosos:
-        intro = "Aquí tienes algunos de los restaurantes más conocidos e icónicos de Madrid:"
-        lineas = [intro, ""]
-        # reutilizar el mismo bucle de formato
-        for r in restaurantes:
-            nombre  = r["nombre"]
-            val     = r["valoracion"]
-            pct     = r.get("_pct_positivo", 0)
-            dist    = r.get("distancia_km")
-            platos  = r.get("platos_destacados", [])
-            resumen = r.get("resumen", "")
-            lineas.append(f"**{nombre}**")
-            meta_linea = f"Valoración: {val}"
-            if pct:
-                meta_linea += f" · {pct:.0f}% reseñas positivas"
-            if r.get("rango_precio"):
-                from_mapa = {"euro": "€", "euro euro": "€€", "euro euro euro": "€€€", "euro euro euro euro": "€€€€"}
-                meta_linea += f" · {from_mapa.get(r['rango_precio'], r['rango_precio'])}"
-            lineas.append(meta_linea)
-            if resumen:
-                lineas.append(resumen[:120] + ("..." if len(resumen) > 120 else ""))
-            if platos:
-                lineas.append(f"🍽️ Platos: {', '.join(platos[:4])}")
-            lineas.append("")
-        return "\n".join(lineas).strip()
-
     if cocina:
         intro_parts.append(f"cocina {cocina}")
     if criterios:
@@ -1376,31 +1085,6 @@ def health():
     }
 
 
-# ── Log de consultas en memoria ──────────────────────────────────────────────
-import threading as _threading
-from datetime import datetime as _datetime
-
-_historial_memoria: list = []   # se resetea al redesplegar
-_log_lock = _threading.Lock()
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "tfm2024admin")  # configura en Render → Environment
-
-def _guardar_log(consulta: str, respuesta: str, restaurantes: list):
-    """Guarda cada consulta en memoria."""
-    try:
-        nombres = ", ".join(r.get("nombre", "") for r in restaurantes[:5])
-        entrada = {
-            "fecha":        _datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "consulta":     consulta,
-            "respuesta":    respuesta.replace("\n", " ")[:600],
-            "restaurantes": nombres,
-            "n_resultados": len(restaurantes),
-        }
-        with _log_lock:
-            _historial_memoria.append(entrada)
-    except Exception as e:
-        print(f"  [log] error: {e}")
-
-
 @app.post("/recomendar", response_model=RecomendacionResponse)
 def endpoint_recomendar(request: ConsultaRequest):
     if not request.consulta.strip():
@@ -1417,9 +1101,6 @@ def endpoint_recomendar(request: ConsultaRequest):
             r.pop("_pct_positivo", None)
             r.pop("_avg_estrellas", None)
 
-        # Guardar en log
-        _guardar_log(request.consulta, respuesta, restaurantes)
-
         return RecomendacionResponse(
             respuesta=respuesta,
             proyecto="nlptown/bert + análisis NLP local",
@@ -1428,53 +1109,6 @@ def endpoint_recomendar(request: ConsultaRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/admin/historial")
-def admin_historial(key: str = ""):
-    """Endpoint privado — muestra el historial de consultas en HTML."""
-    if key != ADMIN_KEY:
-        from fastapi.responses import HTMLResponse
-        return HTMLResponse("<h2>403 — Acceso denegado</h2>", status_code=403)
-    from fastapi.responses import HTMLResponse
-    with _log_lock:
-        entradas = list(reversed(_historial_memoria))
-    filas = ""
-    for e in entradas:
-        filas += f"""
-        <tr>
-          <td>{e['fecha']}</td>
-          <td>{e['consulta']}</td>
-          <td style='color:#888;font-size:12px'>{e['restaurantes']}</td>
-          <td style='text-align:center'>{e['n_resultados']}</td>
-          <td style='font-size:11px;color:#666'>{e['respuesta'][:200]}...</td>
-        </tr>"""
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset='utf-8'>
-  <title>Historial de consultas</title>
-  <style>
-    body {{ font-family: sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }}
-    h1 {{ color: #c8a96e; }}
-    table {{ border-collapse: collapse; width: 100%; font-size: 13px; }}
-    th {{ background: #1a1a1a; color: #c8a96e; padding: 10px; text-align: left; }}
-    td {{ padding: 8px 10px; border-bottom: 1px solid #2a2a2a; vertical-align: top; }}
-    tr:hover td {{ background: #161616; }}
-  </style>
-</head>
-<body>
-  <h1>📋 Historial de consultas</h1>
-  <p style='color:#666'>{len(entradas)} consultas desde el último despliegue</p>
-  <table>
-    <tr>
-      <th>Fecha</th><th>Consulta</th><th>Restaurantes</th><th>N</th><th>Respuesta</th>
-    </tr>
-    {filas if filas else "<tr><td colspan='5' style='color:#555;text-align:center'>Sin consultas aún</td></tr>"}
-  </table>
-</body>
-</html>"""
-    return HTMLResponse(html)
 
 
 @app.get("/restaurantes")
