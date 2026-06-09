@@ -145,6 +145,101 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
 
     return consulta
 
+
+def _generar_resumen_gemini(row) -> str:
+    """
+    Usa Gemini para generar un párrafo de presentación del restaurante
+    basado exclusivamente en datos reales extraídos de sus reseñas.
+    Si Gemini no está disponible o falla, devuelve un resumen automático básico.
+    """
+    if not _GEMINI_KEY:
+        return ""
+
+    nombre    = str(row.get("nombre", "") or "")
+    n         = int(row.get("n_resenas", 0) or 0)
+    pct_pos   = float(row.get("pct_positivo", 0) or 0)
+    val       = float(row.get("valoracion_google", 0) or 0)
+    todos_platos = str(row.get("todos_platos", "") or "")
+    servicio_frases = str(row.get("servicio_frases", "") or "")
+    personal  = str(row.get("personal_destacado", "") or "")
+    terminos  = str(row.get("terminos_tfidf", "") or "")
+
+    # Dimensiones NLP
+    comida_avg   = float(row.get("comida_avg_stars", 0) or 0)
+    servicio_avg = float(row.get("servicio_avg_stars", 0) or 0)
+    ambiente_avg = float(row.get("ambiente_avg_stars", 0) or 0)
+    precio_avg   = float(row.get("precio_avg_stars", 0) or 0)
+
+    # Criterios detectados
+    criterios = []
+    if row.get("criterio_terraza"):   criterios.append("terraza")
+    if row.get("criterio_romantico"): criterios.append("ambiente romántico")
+    if row.get("criterio_ninos"):     criterios.append("apto para niños")
+    if row.get("criterio_vistas"):    criterios.append("con vistas")
+    if row.get("criterio_mascotas"):  criterios.append("admite mascotas")
+
+    # Frases de servicio — máx 3 fragmentos
+    frases = ""
+    if servicio_frases and servicio_frases != "nan":
+        fragmentos = [f.strip() for f in servicio_frases.split("|") if len(f.strip()) > 20][:3]
+        frases = " | ".join(fragmentos)
+
+    dim_texto = []
+    if comida_avg   > 0: dim_texto.append(f"comida {comida_avg:.1f}/5")
+    if servicio_avg > 0: dim_texto.append(f"servicio {servicio_avg:.1f}/5")
+    if ambiente_avg > 0: dim_texto.append(f"ambiente {ambiente_avg:.1f}/5")
+    if precio_avg   > 0: dim_texto.append(f"precio {precio_avg:.1f}/5")
+
+    prompt = (
+        f"Eres un experto en gastronomía madrileña. Escribe UN párrafo de presentación "
+        f"atractivo y natural para el restaurante '{nombre}', dirigido a alguien que busca "
+        f"dónde comer en Madrid. Usa SOLO los datos que te doy, sin inventar nada.\n\n"
+        f"DATOS DEL RESTAURANTE (extraídos de {n} reseñas reales de Google):\n"
+        f"- Valoración Google: {val}/5 ({pct_pos:.0f}% de reseñas positivas)\n"
+        f"- Platos más mencionados en reseñas: {todos_platos[:200]}\n"
+    )
+    if dim_texto:
+        prompt += f"- Puntuación por dimensión: {', '.join(dim_texto)}\n"
+    if personal and personal != "nan":
+        prompt += f"- Personal destacado por clientes: {personal[:150]}\n"
+    if frases:
+        prompt += f"- Fragmentos literales de reseñas sobre el servicio: {frases[:400]}\n"
+    if terminos and terminos != "nan":
+        prompt += f"- Términos más característicos según los clientes: {terminos}\n"
+    if criterios:
+        prompt += f"- Características destacadas: {', '.join(criterios)}\n"
+
+    prompt += (
+        f"\nEscribe el párrafo en español, máximo 3 frases. "
+        f"Menciona los platos estrella, la valoración general y algo del ambiente o servicio si los datos lo justifican. "
+        f"Tono cálido y directo. NO uses frases como 'según las reseñas' o 'los clientes dicen' — "
+        f"escríbelo como si fuera una presentación editorial, pero basada en los datos reales."
+    )
+
+    try:
+        import json as _json, urllib.request as _ureq
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 200},
+            "safetySettings": [],
+        }
+        data = _json.dumps(payload).encode()
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
+        req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=15)
+        result = _json.loads(resp.read().decode("utf-8"))
+        candidates = result.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            texto = "".join(p.get("text", "") for p in parts).strip()
+            if texto and len(texto) > 20:
+                return texto
+    except Exception as e:
+        print(f"  [Gemini resumen] error para {nombre}: {e}")
+
+    return ""
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ESTADO GLOBAL
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1058,9 +1153,10 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     # Platos frecuencia: {"croquetas": 34, "pulpo": 21}
     platos_frecuencia = _parsear_platos_frecuencia(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
 
-    # Generar resumen automático si no hay columna 'resumen'
-    resumen = str(row.get("resumen", "") or "")
-    if not resumen or resumen == "nan":
+    # Generar resumen con Gemini basado en datos reales de reseñas
+    resumen = _generar_resumen_gemini(row)
+    if not resumen:
+        # Fallback si Gemini no está disponible
         pct = float(row.get("pct_positivo", 0) or 0)
         n = int(row.get("n_resenas", 0) or 0)
         platos_top = platos_destacados[:3]
@@ -1423,8 +1519,23 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
             lineas.append("")
         return "\n".join(lineas).strip()
 
+    ETIQUETAS_COCINA = {
+        'taberna': 'tabernas', 'asador': 'asadores',
+        'marisqueria': 'marisquerías', 'arroceria': 'arrocerías',
+        'hamburgueseria': 'hamburgueserías', 'fusion': 'cocina fusión',
+        'gallega': 'cocina gallega', 'vasca': 'cocina vasca',
+        'asturiana': 'cocina asturiana', 'madrileña': 'cocina madrileña',
+        'andaluza': 'cocina andaluza', 'italiana': 'cocina italiana',
+        'japonesa': 'cocina japonesa', 'india': 'cocina india',
+        'mexicana': 'cocina mexicana', 'peruana': 'cocina peruana',
+        'venezolana': 'cocina venezolana', 'argentina': 'cocina argentina',
+        'tailandesa': 'cocina tailandesa', 'arabe': 'cocina árabe',
+        'francesa': 'cocina francesa', 'griega': 'cocina griega',
+        'china': 'cocina china', 'colombiana': 'cocina colombiana',
+        'americana': 'cocina americana',
+    }
     if cocina:
-        intro_parts.append(f"cocina {cocina}")
+        intro_parts.append(ETIQUETAS_COCINA.get(cocina, f'cocina {cocina}'))
     if criterios:
         etiquetas = {
             "romantico": "ambiente romántico", "ninos": "apto para niños",
