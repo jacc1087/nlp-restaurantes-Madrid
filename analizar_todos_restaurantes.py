@@ -272,132 +272,95 @@ PATRONES_NO_PLATO = re.compile(
 # ─────────────────────────────────────────────────────────────────────────────
 
 PLATOS_POR_COCINA = {
-    "gallega":    ["pulpo","empanada","percebes","navajas","vieiras","berberechos",
-                   "zamburinas","zamburiñas","caldo gallego","lacon","grelos","padron",
-                   "filloas","tetilla","pote gallego","zorza","ribeiro","albarino"],
-    "asturiana":  ["cachopo","fabada","oricios","pote asturiano","cabrales",
-                   "casadielles","sidra","tortos","frixuelos","callos asturianos"],
-    "vasca":      ["pintxos","pintxo","gilda","bacalao pil pil","txangurro","marmitako",
-                   "kokotxas","txakoli","chipirones en su tinta","merluza en salsa verde",
-                   "bacalao","merluza","anchoas","pinchos"],
-    "italiana":   ["carbonara","cacio e pepe","amatriciana","ossobuco","panna cotta",
-                   "risotto","tagliatelle","pappardelle","gnocchi","cannoli","arancini",
-                   "burrata","stracciatella","tiramisu","tiramisú","lasana","lasaña",
-                   "pasta","pizza","bruschetta","focaccia"],
-    "madrileña":  ["cocido madrileño","cocido","callos","callos madrileños",
-                   "bocadillo calamares","soldaditos pavia","migas"],
-    "madrileña":  ["cocido madrileño","cocido","callos","callos madrileños",
-                   "bocadillo calamares","soldaditos pavia","migas"],
-    "peruana":    ["lomo saltado","lomo salteado","causa","anticuchos","chaufa",
-                   "aji de gallina","leche de tigre","tiradito","ceviche",
-                   "pachamanquero","chicharron peruano"],
-    "japonesa":   ["ramen","sushi","sashimi","gyozas","tempura","udon","mochi",
-                   "katsu","takoyaki","tonkatsu","nigiri","yakitori","edamame","miso","soba"],
-    "india":      ["tikka masala","biryani","naan","samosa","korma","dal","tandoori",
-                   "chapati","pakora","butter chicken","palak paneer","chana masala",
-                   "lassi","dosa","saag"],
-    "mexicana":   ["burrito","quesadilla","fajitas","guacamole","enchilada","pozole",
-                   "carnitas","mole","tacos","chilaquiles","chile relleno","tamales",
-                   "tostadas","nachos"],
-    "venezolana": ["arepa","arepas","pabellon criollo","cachapa","hallaca","pernil",
-                   "caraotas","tequeños","mandocas","chicha"],
-    "colombiana": ["bandeja paisa","ajiaco","sancocho","changua","lechona"],
-    "china":      ["dim sum","wonton","pato pekin","chow mein","baozi","mapo tofu",
-                   "dumplings","spring roll"],
-    "tailandesa": ["pad thai","tom yum","massaman","curry verde","curry rojo","satay",
-                   "som tam","larb","mango sticky rice"],
-    "francesa":   ["foie gras","confit de pato","bouillabaisse","coq au vin","escargots",
-                   "crepe","souffle","cassoulet","magret","ratatouille","tartare"],
-    "griega":     ["gyros","souvlaki","moussaka","spanakopita","tzatziki","baklava",
-                   "dolmades","kleftiko","taramasalata"],
-    "arabe":      ["shawarma","falafel","tabule","baba ganoush","labneh","shakshuka",
-                   "kibbeh","fattoush","couscous","hummus","kebab"],
-    "americana":  ["smash burger","pulled pork","costillas bbq","mac and cheese",
-                   "chicken wings","brisket","coleslaw","brownie","costillar"],
+    'gallega':    ['empanada gallega', 'percebes', 'vieiras', 'caldo gallego', 'lacon', 'filloas', 'pote gallego', 'zorza'],
+    'asturiana':  ['cachopo', 'cachopu', 'fabada asturiana', 'fabada', 'oricios', 'cabrales', 'tortos', 'frixuelos', 'verdinas'],
+    'vasca':      ['pintxos', 'pintxo', 'gilda', 'kokotxas', 'cocochas', 'txangurro', 'marmitako', 'txakoli', 'pil pil', 'angulas'],
+    'andaluza':   ['pescaito frito', 'tortillitas de camarones', 'ajoblanco', 'berenjenas con miel', 'espinacas con garbanzos', 'cola de toro'],
+    'madrileña':  ['cocido madrileño', 'cocido madrileno', 'callos a la madrileña', 'bocadillo de calamares', 'soldaditos de pavia'],
+    'italiana':   ['carbonara', 'cacio e pepe', 'amatriciana', 'ossobuco', 'panna cotta', 'tiramisú', 'tiramisu',
+                   'tagliatelle', 'pappardelle', 'gnocchi', 'cannoli', 'arancini', 'burrata', 'lasaña', 'lasana', 'pizza', 'bruschetta', 'focaccia'],
+    'peruana':    ['lomo saltado', 'lomo salteado', 'causa', 'causa limeña', 'anticuchos', 'aji de gallina', 'leche de tigre', 'chaufa', 'tiradito'],
+    'japonesa':   ['ramen', 'sushi', 'sashimi', 'nigiri', 'gyozas', 'gyoza', 'tempura', 'udon', 'mochi', 'edamame', 'yakitori', 'takoyaki'],
+    'india':      ['tikka masala', 'biryani', 'naan', 'samosa', 'korma', 'dal', 'tandoori', 'butter chicken', 'palak paneer'],
+    'mexicana':   ['tacos', 'burrito', 'quesadilla', 'fajitas', 'enchilada', 'pozole', 'carnitas', 'chilaquiles', 'tamales'],
+    'venezolana': ['arepa', 'arepas', 'pabellon', 'cachapa', 'hallaca', 'tequeños', 'mandocas', 'caraotas'],
+    'argentina':  ['entraña', 'mollejas', 'chorizo criollo', 'empanadas argentinas', 'empanadas criollas', 'lomo alto', 'chimichurri', 'provoleta'],
+    'arabe':      ['shawarma', 'falafel', 'tabule', 'baba ganoush', 'labneh', 'shakshuka', 'kibbeh', 'couscous'],
+    'americana':  ['smash burger', 'pulled pork', 'costillas bbq', 'mac and cheese', 'chicken wings', 'brisket'],
+    'griega':     ['gyros', 'souvlaki', 'moussaka', 'spanakopita', 'baklava', 'dolmades'],
+    'china':      ['dim sum', 'wonton', 'pato pekin', 'chow mein', 'dumplings'],
+    'tailandesa': ['pad thai', 'tom yum', 'massaman', 'satay'],
+    'francesa':   ['foie gras', 'confit de pato', 'magret', 'bouillabaisse', 'escargots', 'cassoulet'],
+    'colombiana': ['bandeja paisa', 'ajiaco', 'sancocho'],
 }
 
-MIN_PLATOS_COCINA_DETECCION = 3   # mínimo de platos distintos para asignar cocina
-MIN_MENCIONES_PLATO_DETECCION = 2  # cada plato debe aparecer en >=2 reseñas distintas
-MIN_PROPORCION_COCINA = 0.30       # platos de esa cocina >= 30% del total de menciones
+_NOMBRE_KEYWORDS = {
+    'gallega':    ['galicia', 'gallego', 'gallega'],
+    'asturiana':  ['asturian', 'asturias'],
+    'vasca':      ['txirimiri', 'dantxari', 'txoko', 'euskal'],
+    'andaluza':   ['gaditana', 'gaditano', 'sevill', 'andaluz'],
+    'madrileña':  ['madril'],
+    'argentina':  ['argentin', 'pampa beef', 'cabaña argentina', 'bayres', 'asado central', 'camoati'],
+    'italiana':   ['trattoria', 'pizzeria', 'pizzart', 'mozzarell', 'napoli', 'piamonte',
+                   'fusco', 'pastamore', 'malafemmena', 'malatesta', 'pulcinella',
+                   'maruzzella', 'oliveto', 'piccola', 'davanti', 'bresca'],
+    'japonesa':   ['sibuya', 'hotaru', 'miyama', 'ichikani', 'dokidoki', 'kaiten sushi', 'sr.ito', 'sakale'],
+    'india':      ['indian', 'tandoori', 'bangalore', 'kathmandu', 'purnima',
+                   'radhuni', 'curry masala', 'indian aroma'],
+    'mexicana':   ['taco bar', 'mawey', 'el rey de los tacos', 'tacos &'],
+    'peruana':    ['kausa', 'quispe', 'tampu', 'ronda 14'],
+    'venezolana': ['grama lounge'],
+    'arabe':      ['hummuseria', 'beytna'],
+    'americana':  ['steakburger', 'steak burger', 'hamburgues', 'burnout', 'brew wild'],
+    'fusion':     ['diverxo', 'streetxo', 'dstage', 'bacira', 'coque', 'bestial', 'casa jaguar'],
+}
 
-def _detectar_cocina_restaurante(todos_platos_str: str) -> str:
-    """
-    Analiza todos_platos de un restaurante y devuelve la cocina predominante.
-    Devuelve '' si no hay suficiente evidencia.
-    """
+def _detectar_cocina_restaurante(todos_platos_str: str, nombre_restaurante: str = '') -> str:
     import unicodedata as _ud, re as _re, math as _math
     def _n(s):
-        s = s.lower()
+        s = s.lower().strip()
         s = _ud.normalize('NFD', s)
         return ''.join(c for c in s if _ud.category(c) != 'Mn')
 
-    if not todos_platos_str or str(todos_platos_str) in ('', 'nan'):
-        return ''
+    # Capa 1: nombre
+    nombre_n = _n(nombre_restaurante)
+    for cocina, kws in _NOMBRE_KEYWORDS.items():
+        if any(kw in nombre_n for kw in kws):
+            return cocina
 
-    # Parsear todos_platos: "pulpo(9), lomo bajo(5)" → {nombre: menciones}
-    platos_rest = {}
-    for parte in str(todos_platos_str).split(','):
-        parte = parte.strip()
-        m = _re.match(r'^(.+?)\((\d+)\)$', parte)
+    # Capa 2: platos exclusivos — si no hay señal clara, devuelve ''
+    if not todos_platos_str or str(todos_platos_str).strip() in ('', 'nan'):
+        return ''
+    platos = {}
+    for p in str(todos_platos_str).split(','):
+        m = _re.match(r'^(.+?)\((\d+)\)$', p.strip())
         if m:
-            platos_rest[_n(m.group(1).strip())] = int(m.group(2))
-
-    if not platos_rest:
+            platos[_n(m.group(1).strip())] = int(m.group(2))
+    if not platos:
         return ''
-
-    total_menciones = sum(platos_rest.values())
-
-    mejor_cocina = ''
-    mejor_score = 0
-
-    # Orden de prioridad: cocinas regionales antes que "española" genérica
-    ORDEN_PRIORIDAD = [
-        'gallega', 'asturiana', 'vasca', 'madrileña',
-        'peruana', 'italiana', 'japonesa', 'india', 'mexicana',
-        'venezolana', 'colombiana', 'china', 'tailandesa',
-        'francesa', 'griega', 'arabe', 'americana', 'madrileña',
-    ]
-    cocinas_ordenadas = sorted(
-        PLATOS_POR_COCINA.items(),
-        key=lambda x: ORDEN_PRIORIDAD.index(x[0]) if x[0] in ORDEN_PRIORIDAD else 99
-    )
-
-    for cocina, platos_def in cocinas_ordenadas:
-        matches = []
-        menciones_cocina = 0
-        for plato_def in platos_def:
-            plato_n = _n(plato_def)
-            for nombre_rest, menciones in platos_rest.items():
-                if plato_n in nombre_rest or nombre_rest in plato_n:
-                    if menciones >= MIN_MENCIONES_PLATO_DETECCION:
-                        matches.append((plato_def, menciones))
-                        menciones_cocina += menciones
+    total = sum(platos.values())
+    mejor, mejor_score = '', 0.0
+    for cocina, defs in PLATOS_POR_COCINA.items():
+        matches, menciones = [], 0
+        for d in defs:
+            dn = _n(d)
+            for pr, mn in platos.items():
+                if dn == pr or (len(dn) > 5 and dn in pr):
+                    if mn >= 2:
+                        matches.append(mn)
+                        menciones += mn
                     break
-
-        # Excepción asturiana: cachopo con ≥5 menciones es suficiente por sí solo
-        if len(matches) < MIN_PLATOS_COCINA_DETECCION:
-            if cocina == 'asturiana':
-                plato_estrella = any(_n(p) in ('cachopo','cachopu') and m >= 5
-                                     for p, m in matches)
-                if not plato_estrella:
-                    continue
+        if len(matches) < 2:
+            if cocina == 'asturiana' and any(m >= 5 for m in matches):
+                pass
             else:
                 continue
-
-        proporcion = menciones_cocina / total_menciones if total_menciones > 0 else 0
-        if proporcion < MIN_PROPORCION_COCINA:
-            # Excepción asturiana: si cachopo domina, relajar proporción
-            if cocina == 'asturiana' and any(_n(p) == 'cachopo' and m >= 5 for p, m in matches):
-                pass  # permitir
-            else:
-                continue
-
-        score = sum(2.0 + _math.log2(m) for _, m in matches)
+        if menciones / total < 0.25:
+            continue
+        score = sum(2 + _math.log2(m) for m in matches)
         if score > mejor_score:
-            mejor_score = score
-            mejor_cocina = cocina
-
-    return mejor_cocina
+            mejor_score, mejor = score, cocina
+    return mejor
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1262,7 +1225,7 @@ def analizar_restaurante(df_r):
         'todos_platos':         todos_str,
         'personal_destacado':   personal_str,
         'terminos_tfidf':       tfidf_str,
-        'cocina_detectada':     _detectar_cocina_restaurante(todos_str),
+        'cocina_detectada':     _detectar_cocina_restaurante(todos_str, nombre),
     }
 
     df_r_out = df_r[['Id_Restaurante','Restaurante','Id_review','Review',
@@ -1557,7 +1520,7 @@ for idx, row in df_final.iterrows():
         print(f"  [{rid}] {nombre_r}: +{[f'{p}({c})' for p,c in nuevos]}")
 
     # Detectar cocina
-    cocina = _detectar_cocina_restaurante(todos_str)
+    cocina = _detectar_cocina_restaurante(todos_str, nombre_r)
     current = str(row.get('cocina_detectada', '') or '')
     if cocina and current in ('', 'nan'):
         df_final.at[idx, 'cocina_detectada'] = cocina
