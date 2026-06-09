@@ -827,7 +827,23 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     Score de afinidad con una cocina basado en criterios estrictos.
     Un restaurante necesita al menos MIN_PLATOS_COCINA platos del listado
     de esa cocina para puntuar. Sin mínimo → score 0.
+
+    Excepción: cocina 'fusion' — se detecta por el campo cocina_detectada
+    del CSV, no por platos (la fusión no tiene platos propios).
     """
+    # ── Caso especial: fusión ─────────────────────────────────────
+    if cocina == "fusion":
+        cocina_detectada = _norm(str(row.get("cocina_detectada", "") or ""))
+        if cocina_detectada == "fusion":
+            # Score basado en calidad: platos presentes + valoración
+            platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
+            n_platos = len(platos_lista)
+            score_base = 10.0
+            if n_platos >= 5:
+                score_base += 2.0
+            return round(score_base, 2)
+        return 0.0
+
     MIN_PLATOS_COCINA = 3
 
     PLATOS_COCINA = {
