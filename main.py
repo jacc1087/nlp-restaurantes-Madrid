@@ -221,7 +221,7 @@ def _generar_resumen_gemini(row) -> str:
         import json as _json, urllib.request as _ureq
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 200},
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 350},
             "safetySettings": [],
         }
         data = _json.dumps(payload).encode()
