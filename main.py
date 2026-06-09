@@ -1557,6 +1557,20 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODELOS PYDANTIC
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ConsultaRequest(BaseModel):
+    consulta: str
+
+class RecomendacionResponse(BaseModel):
+    respuesta: str
+    proyecto: str
+    restaurantes: list
+    consulta_usuario: str
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # APP
 # ═══════════════════════════════════════════════════════════════════════════════
 
