@@ -60,10 +60,7 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
     prompt = (
         "Normaliza esta búsqueda de restaurante en Madrid en UNA LÍNEA.\n\n"
         "EJEMPLOS (entrada → salida):\n"
-        "quiero comer comida gallega → cocina gallega\n"
-        "quiero un restaurante gallego → cocina gallega\n"
-        "un buen restaurante italiano → cocina italiana\n"
-        "me apetece un chino → cocina china\n"
+        "quiero comer comida gallega → cocina gallega\n""quiero un restaurante gallego → cocina gallega\n""un buen restaurante italiano → cocina italiana\n""me apetece un chino → cocina china\n"
         "me apetece un italiano → cocina italiana\n"
         "un japonés auténtico → cocina japonesa\n"
         "quiero comer croquetas → croquetas\n"
@@ -74,6 +71,8 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         "sitio para ir con niños → apto para niños\n"
         "algo con terraza → con terraza\n"
         "sitios conocidos de madrid → restaurantes famosos\n"
+        "quiero comida vasca → cocina vasca\n"
+        "un buen peruano → cocina peruana\n"
         "quiero cocido madrileño → cocido madrileño\n"
         "busco un restaurante castizo → cocina madrileña\n"
         "quiero callos a la madrileña → callos\n"
@@ -107,7 +106,6 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         "alta cocina en madrid → cocina fusión\n\n"
         "REGLAS:\n"
         "- Cocina/gastronomía de un país o región: SIEMPRE devuelve 'cocina X' (cocina gallega, cocina italiana...)\n"
-        "- Tipo de restaurante (asador, marisquería, arrocería, hamburguesería): devuelve solo ese término\n"
         "- Plato concreto: solo el nombre del plato\n"
         "- Si hay zona: consérvala\n"
         "- NO añadas nada que no esté en la consulta\n\n"
@@ -149,59 +147,52 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
 def _generar_resumen_gemini(row) -> str:
     """
     Genera un párrafo de ~100 palabras basado en reseñas reales del restaurante.
-    Usa el CSV de reseñas completas para dar contexto real a Gemini.
     """
     if not _GEMINI_KEY:
         return ""
 
-    nombre     = str(row.get("nombre", "") or "")
-    id_rest    = str(row.get("id_restaurante", "") or "")
-    n          = int(row.get("n_resenas", 0) or 0)
-    pct_pos    = float(row.get("pct_positivo", 0) or 0)
-    val        = float(row.get("valoracion_google", 0) or 0)
-    platos_raw = str(row.get("todos_platos", "") or "")
-    terminos   = str(row.get("terminos_tfidf", "") or "")
-    comida_avg = float(row.get("comida_avg_stars", 0) or 0)
+    nombre       = str(row.get("nombre", "") or "")
+    id_rest      = str(row.get("id_restaurante", "") or "")
+    n            = int(row.get("n_resenas", 0) or 0)
+    pct_pos      = float(row.get("pct_positivo", 0) or 0)
+    val          = float(row.get("valoracion_google", 0) or 0)
+    platos_raw   = str(row.get("todos_platos", "") or "")
+    terminos     = str(row.get("terminos_tfidf", "") or "")
+    comida_avg   = float(row.get("comida_avg_stars", 0) or 0)
     servicio_avg = float(row.get("servicio_avg_stars", 0) or 0)
-    precio_avg = float(row.get("precio_avg_stars", 0) or 0)
-    criterio_terraza  = bool(row.get("criterio_terraza", False))
+    precio_avg   = float(row.get("precio_avg_stars", 0) or 0)
+    criterio_terraza   = bool(row.get("criterio_terraza", False))
     criterio_romantico = bool(row.get("criterio_romantico", False))
-    criterio_ninos    = bool(row.get("criterio_ninos", False))
+    criterio_ninos     = bool(row.get("criterio_ninos", False))
 
     # Cargar reseñas reales del CSV
     resenas_texto = ""
     try:
-        import os
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        ruta_resenas = os.path.join(base_dir, "resenas_unificadas.csv")
-        if os.path.exists(ruta_resenas):
+        import os as _os
+        base_dir = _os.path.dirname(_os.path.abspath(__file__))
+        ruta = _os.path.join(base_dir, "resenas_unificadas.csv")
+        if _os.path.exists(ruta):
             import pandas as _pd
-            df_r = _pd.read_csv(ruta_resenas)
-            # Filtrar por id o por nombre
+            df_r = _pd.read_csv(ruta)
             mask = df_r["Id_Restaurante"].astype(str) == id_rest
             if not mask.any():
                 mask = df_r["Restaurante"].str.lower() == nombre.lower()
             resenas = df_r[mask]["Review"].dropna().tolist()
-            # Tomar las 8 más largas (más informativas)
-            resenas_ordenadas = sorted(resenas, key=len, reverse=True)[:8]
-            resenas_texto = "\n".join(f"- {r[:200]}" for r in resenas_ordenadas)
+            resenas_ord = sorted(resenas, key=len, reverse=True)[:8]
+            resenas_texto = "\n".join(f"- {r[:200]}" for r in resenas_ord)
     except Exception as e:
-        print(f"  [resenas] error cargando CSV: {e}")
+        print(f"  [resenas] error: {e}")
 
-    # Platos top con menciones
     platos_top = ", ".join(platos_raw.split(",")[:6]).strip() if platos_raw and platos_raw != "nan" else ""
-
-    # Criterios detectados
     criterios = []
     if criterio_terraza:   criterios.append("terraza")
     if criterio_romantico: criterios.append("ambiente romántico")
     if criterio_ninos:     criterios.append("apto para niños")
 
-    # Construir prompt
     prompt = (
         f"Eres un crítico gastronómico de Madrid. Basándote EXCLUSIVAMENTE en las reseñas "
         f"reales que te doy, escribe UN PÁRRAFO de entre 80 y 100 palabras que describa "
-        f"la experiencia en '{nombre}'. \n\n"
+        f"la experiencia en '{nombre}'.\n\n"
         f"DATOS:\n"
         f"- Valoración: {val}/5 ({pct_pos:.0f}% positivas, {n} reseñas)\n"
         f"- Platos más mencionados: {platos_top}\n"
@@ -220,8 +211,8 @@ def _generar_resumen_gemini(row) -> str:
         f"\nINSTRUCCIONES:\n"
         f"- Menciona platos concretos que aparezcan en las reseñas\n"
         f"- Si hay nombres de personal mencionados, inclúyelos\n"
-        f"- Refleja el tono general (positivo, mixto o crítico) que transmiten las reseñas\n"
-        f"- PROHIBIDO: 'experiencia', 'excepcional', 'gastronómica', 'imprescindible', 'único'\n"
+        f"- Refleja el tono general que transmiten las reseñas\n"
+        f"- PROHIBIDO: experiencia, excepcional, gastronómica, imprescindible, único\n"
         f"- Escribe en tercera persona, tono editorial, sin comillas\n"
         f"- Solo el párrafo, nada más"
     )
@@ -251,6 +242,57 @@ def _generar_resumen_gemini(row) -> str:
         print(f"  [Gemini resumen] error {nombre}: {e}")
 
     return ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ESTADO GLOBAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+df_global: Optional[pd.DataFrame] = None
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FASTAPI APP
+# ═══════════════════════════════════════════════════════════════════════════════
+
+app = FastAPI(
+    title="API Recomendación Restaurantes Madrid",
+    description="Sistema de recomendación basado en NLP local (nlptown/bert)",
+    version="2.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODELOS PYDANTIC
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class MensajeHistorial(BaseModel):
+    role: str
+    content: str
+
+
+class ConsultaRequest(BaseModel):
+    consulta: str
+    historial: Optional[List[MensajeHistorial]] = []
+
+
+class RecomendacionResponse(BaseModel):
+    respuesta: str
+    proyecto: str
+    restaurantes: Optional[List[dict]] = []
+    consulta_usuario: Optional[str] = ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CARGA Y PREPARACIÓN DE DATOS
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def _parsear_lista(val) -> list:
     """Convierte string de lista Python/JSON a lista real."""
@@ -700,22 +742,20 @@ SINONIMOS_COCINA = {
     "americano": "americana", "americana": "americana", "usa": "americana",
     "hamburguesa": "americana", "hamburguesas": "americana", "burger": "americana",
     "smash burger": "americana", "hamburgueseria": "americana",
-    # Argentina / Asador / Carne
-    "argentino": "argentina", "argentina_cocina": "argentina",
+    # Argentina / Asador
+    "argentino": "argentina",
     "asador": "asador", "asadores": "asador",
     "chuleton": "asador", "chuletón": "asador",
     "lechazo": "asador", "cordero asado": "asador", "cordero": "asador",
     "carne a la brasa": "asador", "parrilla": "asador",
     "entrana": "asador", "entraña": "asador",
-    "buey": "asador", "buey a la brasa": "asador",
-    "lomo alto": "asador",
+    "buey": "asador", "lomo alto": "asador",
     # Marisquería
     "marisco": "marisqueria", "mariscos": "marisqueria",
     "marisqueria": "marisqueria", "marisquería": "marisqueria",
     "percebes": "marisqueria", "ostras": "marisqueria", "vieiras": "marisqueria",
     "bogavante": "marisqueria", "langosta": "marisqueria", "carabineros": "marisqueria",
     "navajas": "marisqueria", "zamburinas": "marisqueria", "zamburiñas": "marisqueria",
-    "marisco fresco": "marisqueria", "pescado y marisco": "marisqueria",
     # Arrocería / Paella
     "arroceria": "arroceria", "arrocería": "arroceria",
     "paella": "arroceria", "paellas": "arroceria",
@@ -726,26 +766,19 @@ SINONIMOS_COCINA = {
     "andaluz": "andaluza", "andaluza": "andaluza", "andalucia": "andaluza",
     "andalucía": "andaluza", "sevilla": "andaluza", "sevillano": "andaluza",
     "gaditano": "andaluza", "gaditana": "andaluza", "cadiz": "andaluza",
-    "jerez": "andaluza", "malaga": "andaluza", "cordoba": "andaluza",
-    "pescaito": "andaluza", "pescaito frito": "andaluza",
-    "tortillitas de camarones": "andaluza", "ajoblanco": "andaluza",
-    "berenjenas con miel": "andaluza", "cola de toro": "andaluza",
-    "salmorejo": "andaluza",
+    "pescaito": "andaluza", "salmorejo": "andaluza", "cola de toro": "andaluza",
     # Catalana
-    "catalan": "catalana", "catalana": "catalana", "cataluna": "catalana",
-    "cataluña": "catalana", "barcelona": "catalana",
+    "catalan": "catalana", "catalana": "catalana", "cataluña": "catalana",
     # Taberna / Tapas
     "taberna": "taberna", "tapas": "taberna", "de tapas": "taberna",
-    "bar de tapas": "taberna", "tasca": "taberna", "tasquita": "taberna",
-    "vermut": "taberna", "vermú": "taberna", "vermuth": "taberna",
+    "bar de tapas": "taberna", "tasca": "taberna", "vermut": "taberna",
     "pinchos": "taberna",
     # Mediterránea
     "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
-    # Fusión / Alta cocina
+    # Fusión
     "fusion": "fusion", "fusión": "fusion",
     "alta cocina": "fusion", "cocina creativa": "fusion",
     "estrella michelin": "fusion", "michelin": "fusion",
-    "gastronomico": "fusion", "gastronómico": "fusion",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -815,15 +848,10 @@ def _detectar_famosos(consulta: str) -> bool:
     return any(p in c for p in PALABRAS_FAMOSOS)
 
 
-CATEGORIAS_ESPECIALES = {'asador', 'marisqueria', 'arroceria', 'hamburgueseria',
-                         'fusion', 'taberna', 'italiano', 'japones', 'indio',
-                         'mexicano', 'peruano', 'venezolano', 'argentino',
-                         'tailandes', 'arabe'}
-
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
     padded = " " + c + " "
-    # Prefijos que preceden al tipo de cocina
+    # Prefijos que preceden al tipo de cocina ("comida X", "restaurante X", "cocina X")
     for prefijo in ["comida ", "restaurante ", "cocina ", "cuisine "]:
         for sinonimo, cocina in SINONIMOS_COCINA.items():
             if prefijo + sinonimo in c:
@@ -863,47 +891,10 @@ def _parsear_platos_str(platos_str: str) -> list:
 
 def _score_cocina(row: pd.Series, cocina: str) -> float:
     """
-    Score de afinidad con una cocina/categoría.
-    - Si es una categoría especial (asador, marisqueria, etc.): busca en categoria_carta.
-    - Si es una cocina de país: usa los platos como antes.
+    Score de afinidad con una cocina basado en criterios estrictos.
+    Un restaurante necesita al menos MIN_PLATOS_COCINA platos del listado
+    de esa cocina para puntuar. Sin mínimo → score 0.
     """
-    # Mapa de valor detectado → valor en categoria_carta
-    MAPA_CATEGORIA = {
-        'asador':       'asador',
-        'marisqueria':  'marisqueria',
-        'arroceria':    'arroceria',
-        'hamburgueseria': 'hamburgueseria',
-        'fusion':       'fusion',
-        'taberna':      'taberna',
-        'italiana':     'italiano',
-        'japonesa':     'japones',
-        'india':        'indio',
-        'mexicana':     'mexicano',
-        'peruana':      'peruano',
-        'venezolana':   'venezolano',
-        'argentina':    'argentino',
-        'tailandesa':   'tailandes',
-        'arabe':        'arabe',
-        'americana':    'hamburgueseria',
-    }
-
-    categoria_buscada = MAPA_CATEGORIA.get(cocina)
-    categoria_restaurante = _norm(str(row.get('categoria_carta', '') or ''))
-
-    if categoria_buscada:
-        # Si el restaurante tiene categoria_carta y coincide → score alto
-        if categoria_restaurante == _norm(categoria_buscada):
-            # Bonus por calidad dentro de la categoría
-            return 10.0 + _score_calidad(row) * 0.5
-        # Si no coincide categoria_carta, score 0 — no mezclar categorías
-        return 0.0
-
-    # Cocinas sin categoría especial (gallega, vasca, madrileña, etc.) → lógica original por platos
-    # PERO primero comprobar cocina_detectada — es la señal más fiable
-    cocina_rest = _norm(str(row.get('cocina_detectada', '') or ''))
-    if cocina_rest == _norm(cocina):
-        return 10.0 + _score_calidad(row) * 0.5
-
     MIN_PLATOS_COCINA = 3
 
     PLATOS_COCINA = {
@@ -950,6 +941,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                         "chicken wings", "brisket", "coleslaw", "brownie", "costillar"],
         "madrileña":   ["cocido madrileño", "cocido madrileno", "cocido", "callos", "callos madrileños",
                         "bocadillo calamares", "soldaditos pavia", "migas"],
+
     }
 
     platos_def = PLATOS_COCINA.get(cocina, [])
@@ -962,6 +954,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     )
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or ""))
 
+    # Contar platos distintos que coinciden
     matches = []
     score = 0.0
     for plato in platos_def:
@@ -977,15 +970,23 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
             if menciones > 1:
                 score += math.log2(menciones)
 
+    # Criterio estricto: mínimo MIN_PLATOS_COCINA platos
     if len(matches) < MIN_PLATOS_COCINA:
         return 0.0
 
+    # Filtro de relevancia: los platos deben ser reales, no menciones anecdóticas.
+    # Pasa si: al menos 2 platos con >1 mención, O un plato estrella con >8 menciones
     con_menciones = sum(1 for m in matches if m["menciones"] > 1)
     plato_estrella = any(m["menciones"] > 8 for m in matches)
     if con_menciones < 2 and not plato_estrella:
         return 0.0
 
-    total_menciones_restaurante = sum(p["menciones"] for p in platos_lista)
+    # Filtro de especialización: las menciones de platos de esta cocina deben representar
+    # al menos el 35% del total de menciones del restaurante.
+    # Evita que restaurantes fusión con platos de muchas cocinas aparezcan como especialistas.
+    total_menciones_restaurante = sum(
+        p["menciones"] for p in platos_lista
+    )
     menciones_cocina = sum(m["menciones"] for m in matches)
     if total_menciones_restaurante > 0:
         proporcion = menciones_cocina / total_menciones_restaurante
@@ -1115,10 +1116,9 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     # Platos frecuencia: {"croquetas": 34, "pulpo": 21}
     platos_frecuencia = _parsear_platos_frecuencia(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
 
-    # Generar resumen con Gemini basado en datos reales de reseñas
+    # Generar resumen con Gemini basado en reseñas reales
     resumen = _generar_resumen_gemini(row)
     if not resumen:
-        # Fallback si Gemini no está disponible
         pct = float(row.get("pct_positivo", 0) or 0)
         n = int(row.get("n_resenas", 0) or 0)
         platos_top = platos_destacados[:3]
@@ -1544,6 +1544,7 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
 
         # Resumen breve
         if resumen:
+            # Truncar a 120 chars para que quede limpio
             lineas.append(resumen)
 
         # Platos destacados (con menciones si disponibles)
