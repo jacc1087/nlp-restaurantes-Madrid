@@ -148,147 +148,88 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
 
 def _generar_resumen_gemini(row) -> str:
     """
-    Usa Gemini para generar un párrafo de presentación del restaurante
-    basado exclusivamente en datos reales extraídos de sus reseñas.
-    Si Gemini no está disponible o falla, devuelve un resumen automático básico.
+    Genera UNA frase que describe la experiencia general del restaurante
+    basándose en frases literales de reseñas y métricas NLP.
+    Fallback automático si Gemini no está disponible.
     """
     if not _GEMINI_KEY:
         return ""
 
-    nombre    = str(row.get("nombre", "") or "")
-    n         = int(row.get("n_resenas", 0) or 0)
-    pct_pos   = float(row.get("pct_positivo", 0) or 0)
-    val       = float(row.get("valoracion_google", 0) or 0)
-    todos_platos = str(row.get("todos_platos", "") or "")
-    servicio_frases = str(row.get("servicio_frases", "") or "")
-    personal  = str(row.get("personal_destacado", "") or "")
-    terminos  = str(row.get("terminos_tfidf", "") or "")
-
-    # Dimensiones NLP
+    nombre       = str(row.get("nombre", "") or "")
+    n            = int(row.get("n_resenas", 0) or 0)
+    pct_pos      = float(row.get("pct_positivo", 0) or 0)
+    val          = float(row.get("valoracion_google", 0) or 0)
+    platos       = str(row.get("todos_platos", "") or "")
+    frases_raw   = str(row.get("servicio_frases", "") or "")
+    personal     = str(row.get("personal_destacado", "") or "")
+    terminos     = str(row.get("terminos_tfidf", "") or "")
     comida_avg   = float(row.get("comida_avg_stars", 0) or 0)
     servicio_avg = float(row.get("servicio_avg_stars", 0) or 0)
-    ambiente_avg = float(row.get("ambiente_avg_stars", 0) or 0)
     precio_avg   = float(row.get("precio_avg_stars", 0) or 0)
 
-    # Criterios detectados
-    criterios = []
-    if row.get("criterio_terraza"):   criterios.append("terraza")
-    if row.get("criterio_romantico"): criterios.append("ambiente romántico")
-    if row.get("criterio_ninos"):     criterios.append("apto para niños")
-    if row.get("criterio_vistas"):    criterios.append("con vistas")
-    if row.get("criterio_mascotas"):  criterios.append("admite mascotas")
+    # Extraer hasta 3 fragmentos de frases reales de reseñas
+    frases = []
+    if frases_raw and frases_raw != "nan":
+        frases = [f.strip() for f in frases_raw.split("|") if len(f.strip()) > 15][:3]
 
-    # Frases de servicio — máx 3 fragmentos
-    frases = ""
-    if servicio_frases and servicio_frases != "nan":
-        fragmentos = [f.strip() for f in servicio_frases.split("|") if len(f.strip()) > 20][:3]
-        frases = " | ".join(fragmentos)
+    # Platos top 5 con menciones
+    platos_top = ", ".join(platos.split(",")[:5]) if platos and platos != "nan" else ""
 
-    dim_texto = []
-    if comida_avg   > 0: dim_texto.append(f"comida {comida_avg:.1f}/5")
-    if servicio_avg > 0: dim_texto.append(f"servicio {servicio_avg:.1f}/5")
-    if ambiente_avg > 0: dim_texto.append(f"ambiente {ambiente_avg:.1f}/5")
-    if precio_avg   > 0: dim_texto.append(f"precio {precio_avg:.1f}/5")
+    # Construir contexto compacto
+    contexto = f"Restaurante: {nombre}\n"
+    contexto += f"Valoración Google: {val}/5 — {pct_pos:.0f}% reseñas positivas ({n} reseñas)\n"
+    if platos_top:
+        contexto += f"Platos más mencionados: {platos_top}\n"
+    if comida_avg > 0:
+        contexto += f"Comida {comida_avg:.1f}/5"
+        if servicio_avg > 0: contexto += f" | Servicio {servicio_avg:.1f}/5"
+        if precio_avg  > 0: contexto += f" | Precio {precio_avg:.1f}/5"
+        contexto += "\n"
+    if personal and personal != "nan":
+        contexto += f"Personal destacado: {personal[:120]}\n"
+    if terminos and terminos != "nan":
+        contexto += f"Palabras clave de los clientes: {terminos}\n"
+    if frases:
+        contexto += "Fragmentos literales de reseñas:\n"
+        for f in frases:
+            contexto += f"  - {f[:150]}\n"
 
     prompt = (
-        f"Eres un experto en gastronomía madrileña. Escribe UN párrafo de presentación "
-        f"atractivo y natural para el restaurante '{nombre}', dirigido a alguien que busca "
-        f"dónde comer en Madrid. Usa SOLO los datos que te doy, sin inventar nada.\n\n"
-        f"DATOS DEL RESTAURANTE (extraídos de {n} reseñas reales de Google):\n"
-        f"- Valoración Google: {val}/5 ({pct_pos:.0f}% de reseñas positivas)\n"
-        f"- Platos más mencionados en reseñas: {todos_platos[:200]}\n"
-    )
-    if dim_texto:
-        prompt += f"- Puntuación por dimensión: {', '.join(dim_texto)}\n"
-    if personal and personal != "nan":
-        prompt += f"- Personal destacado por clientes: {personal[:150]}\n"
-    if frases:
-        prompt += f"- Fragmentos literales de reseñas sobre el servicio: {frases[:400]}\n"
-    if terminos and terminos != "nan":
-        prompt += f"- Términos más característicos según los clientes: {terminos}\n"
-    if criterios:
-        prompt += f"- Características destacadas: {', '.join(criterios)}\n"
-
-    prompt += (
-        f"\nEscribe el párrafo en español, máximo 3 frases. "
-        f"Menciona los platos estrella, la valoración general y algo del ambiente o servicio si los datos lo justifican. "
-        f"Tono cálido y directo. NO uses frases como 'según las reseñas' o 'los clientes dicen' — "
-        f"escríbelo como si fuera una presentación editorial, pero basada en los datos reales."
+        f"Eres un crítico gastronómico. Basándote EXCLUSIVAMENTE en estos datos reales "
+        f"de reseñas de Google, escribe UNA SOLA FRASE (máximo 25 palabras) que capture "
+        f"la esencia de la experiencia en este restaurante. "
+        f"Sé concreto, usa los platos y detalles reales. No inventes nada.\n\n"
+        f"{contexto}\n"
+        f"Responde SOLO con la frase, sin comillas, sin punto final."
     )
 
     try:
         import json as _json, urllib.request as _ureq
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 200},
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 80},
             "safetySettings": [],
         }
         data = _json.dumps(payload).encode()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
-        req = _ureq.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-        resp = _ureq.urlopen(req, timeout=15)
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}")
+        req = _ureq.Request(url, data=data,
+                            headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=10)
         result = _json.loads(resp.read().decode("utf-8"))
         candidates = result.get("candidates", [])
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
             texto = "".join(p.get("text", "") for p in parts).strip()
-            if texto and len(texto) > 20:
+            # Limpiar comillas si Gemini las añade
+            texto = texto.strip('"').strip("'").strip()
+            if texto and 10 < len(texto) < 300:
                 return texto
     except Exception as e:
-        print(f"  [Gemini resumen] error para {nombre}: {e}")
+        print(f"  [Gemini resumen] error {nombre}: {e}")
 
     return ""
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ESTADO GLOBAL
-# ═══════════════════════════════════════════════════════════════════════════════
-
-df_global: Optional[pd.DataFrame] = None
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FASTAPI APP
-# ═══════════════════════════════════════════════════════════════════════════════
-
-app = FastAPI(
-    title="API Recomendación Restaurantes Madrid",
-    description="Sistema de recomendación basado en NLP local (nlptown/bert)",
-    version="2.0.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODELOS PYDANTIC
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class MensajeHistorial(BaseModel):
-    role: str
-    content: str
-
-
-class ConsultaRequest(BaseModel):
-    consulta: str
-    historial: Optional[List[MensajeHistorial]] = []
-
-
-class RecomendacionResponse(BaseModel):
-    respuesta: str
-    proyecto: str
-    restaurantes: Optional[List[dict]] = []
-    consulta_usuario: Optional[str] = ""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CARGA Y PREPARACIÓN DE DATOS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _parsear_lista(val) -> list:
     """Convierte string de lista Python/JSON a lista real."""
