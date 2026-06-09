@@ -6,6 +6,8 @@ def _n(s):
     s = unicodedata.normalize('NFD', s)
     return ''.join(c for c in s if unicodedata.category(c) != 'Mn')
 
+# ── Capa 1: por nombre ────────────────────────────────────────────────────────
+# Cada entrada verificada contra platos reales del CSV
 NOMBRE_KEYWORDS = {
     'gallega':     ['galicia', 'gallego', 'gallega', 'montes de galicia', 'morgana'],
     'asturiana':   ['asturian', 'asturias', 'eiffel restaurante'],
@@ -22,7 +24,7 @@ NOMBRE_KEYWORDS = {
     'japonesa':    ['sibuya', 'hotaru', 'miyama', 'ichikani', 'dokidoki',
                     'kaiten sushi', 'sr.ito', 'sakale'],
     'india':       ['indian', 'tandoori', 'bangalore', 'kathmandu', 'purnima',
-                    'radhuni', 'curry masala', 'indian aroma'],
+                    'radhuni', 'curry masala', 'indian aroma', 'arpit'],
     'mexicana':    ['taco bar', 'mawey', 'el rey de los tacos', 'tacos &',
                     'la encomienda'],
     'peruana':     ['kausa', 'quispe', 'tampu', 'ronda 14'],
@@ -32,13 +34,18 @@ NOMBRE_KEYWORDS = {
     'fusion':      ['diverxo', 'streetxo', 'dstage', 'bacira', 'coque',
                     'bestial', 'casa jaguar'],
     'tailandesa':  ['bambúbox', 'bambubox'],
-    # Categorías especiales (no son cocinas de país)
+    # Categorías especiales verificadas por platos
     'arroceria':   ['arroceria', 'arrocería', 'casa benigna',
                     'taberna de peñalver', 'taberna de penalver',
                     'taberna el arco'],
-    'marisqueria': ['alabaster', 'la gaditana'],
+    'asador':      ['meson restaurante la mi venta', 'meson molinero',
+                    'camino sacramento'],
+    'marisqueria': ['alabaster'],
+    # Excluidos explícitamente de italiana (tiramisú anecdótico, carta española)
+    'sin_categoria': ['la burbujería', 'la burbujeria'],
 }
 
+# ── Capa 2: por platos exclusivos ─────────────────────────────────────────────
 PLATOS_COCINA = {
     'gallega':    ['empanada gallega', 'percebes', 'vieiras', 'caldo gallego',
                    'lacon', 'filloas', 'pote gallego', 'zorza', 'cocido gallego'],
@@ -82,6 +89,7 @@ PLATOS_COCINA = {
     'colombiana': ['bandeja paisa', 'ajiaco', 'sancocho'],
 }
 
+# ── Platos para categoria_carta ───────────────────────────────────────────────
 PLATOS_CATEGORIA = {
     'asador':      ['chuleton', 'chuletón', 'lechazo', 'entraña', 'lomo alto',
                     'costillar', 'secreto iberico', 'secreto ibérico', 'mollejas',
@@ -113,9 +121,15 @@ PLATOS_CATEGORIA = {
                        'mac and cheese', 'chicken wings', 'brisket'],
 }
 
+# Restaurantes que deben quedar sin categoría aunque matcheen por platos
+# (carta española mixta con algún plato internacional anecdótico)
+EXCLUIR_CATEGORIA = {
+    'la burbujeria',   # tiramisú anecdótico, carta española
+}
+
 MIN_PLATOS_MARISQUERIA = 3
 MIN_PLATOS     = 2
-MIN_MENCIONES  = 3   # subido a 3 para evitar falsos positivos por platos anecdóticos
+MIN_MENCIONES  = 3
 MIN_PROPORCION = 0.20
 
 def _parsear_platos(todos_platos):
@@ -128,8 +142,17 @@ def _parsear_platos(todos_platos):
 
 def detectar_cocina(nombre, todos_platos):
     nombre_n = _n(str(nombre))
+    # Excluidos explícitamente
+    if nombre_n in EXCLUIR_CATEGORIA:
+        return ''
     for cocina, kws in NOMBRE_KEYWORDS.items():
-        if cocina in ('arroceria', 'marisqueria'):
+        if cocina == 'sin_categoria':
+            continue
+        # Categorías especiales no son cocinas — pero si el nombre matchea,
+        # devolver '' para limpiar cualquier cocina_detectada anterior incorrecta
+        if cocina in ('arroceria', 'marisqueria', 'asador'):
+            if any(kw in nombre_n for kw in kws):
+                return ''
             continue
         if any(kw in nombre_n for kw in kws):
             return cocina
@@ -162,6 +185,9 @@ def detectar_cocina(nombre, todos_platos):
 
 def detectar_categoria(nombre, todos_platos, cocina_detectada):
     nombre_n = _n(str(nombre))
+    # Excluidos explícitamente
+    if nombre_n in EXCLUIR_CATEGORIA:
+        return ''
     mapa_nombre = {
         'italiana': 'italiano', 'japonesa': 'japones', 'india': 'indio',
         'mexicana': 'mexicano', 'peruana': 'peruano', 'venezolana': 'venezolano',
@@ -169,12 +195,13 @@ def detectar_categoria(nombre, todos_platos, cocina_detectada):
         'vasca': 'taberna', 'madrileña': 'taberna', 'gallega': 'taberna',
         'asturiana': 'taberna', 'andaluza': 'taberna', 'fusion': 'fusion',
         'americana': 'hamburgueseria',
-        'arroceria': 'arroceria', 'marisqueria': 'marisqueria',
+        'arroceria': 'arroceria', 'marisqueria': 'marisqueria', 'asador': 'asador',
     }
     for categoria, kws in NOMBRE_KEYWORDS.items():
+        if categoria == 'sin_categoria':
+            continue
         if any(kw in nombre_n for kw in kws):
             return mapa_nombre.get(categoria, categoria)
-
     platos = _parsear_platos(todos_platos)
     if platos:
         total = sum(platos.values())
@@ -199,7 +226,6 @@ def detectar_categoria(nombre, todos_platos, cocina_detectada):
                 mejor_score, mejor = score, categoria
         if mejor:
             return mejor
-
     mapa_cocina = {
         'italiana': 'italiano', 'japonesa': 'japones', 'india': 'indio',
         'mexicana': 'mexicano', 'peruana': 'peruano', 'venezolana': 'venezolano',
@@ -225,9 +251,9 @@ print()
 print('DISTRIBUCIÓN categoria_carta:')
 print(df['categoria_carta'].replace('','(sin categoría)').value_counts().to_string())
 print()
-for cocina in sorted(df['cocina_detectada'].replace('','zzz_sin').unique()):
-    label = '' if cocina == 'zzz_sin' else cocina
-    filas = df[df['cocina_detectada'].replace('','zzz_sin')==cocina]
+for cocina in sorted(df['cocina_detectada'].replace('','zzz').unique()):
+    label = '' if cocina == 'zzz' else cocina
+    filas = df[df['cocina_detectada'].replace('','zzz')==cocina]
     print(f'[{label or "SIN CATEGORÍA"}]')
     for _, r in filas.iterrows():
         print(f'  {r["nombre"]}: {str(r["todos_platos"])[:90]}')
