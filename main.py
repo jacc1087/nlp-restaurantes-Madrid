@@ -79,7 +79,8 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         "quiero callos a la madrileña → callos\n"
         "quiero gallinejas → gallinejas\n"
         "me apetece oreja a la plancha → oreja\n"
-        "quiero un asador → asador\n"
+        "quiero un chuletón de vaca rubia gallega → chuletón\n"
+        "quiero carne de vaca rubia gallega → asador\n"
         "me apetece un chuletón → chuletón\n"
         "quiero comer carne a la brasa → asador\n"
         "busco un buen asador → asador\n"
@@ -612,8 +613,10 @@ SINONIMOS_COCINA = {
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
     "cachopo": "asturiana", "fabada": "asturiana", "sidra": "asturiana",
     # Gallega
-    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
-    "pulpo": "gallega", "empanada gallega": "gallega", "percebes": "gallega",
+    "gallego": "gallega", "galicia": "gallega",
+    "cocina gallega": "gallega", "comida gallega": "gallega",
+    "restaurante gallego": "gallega", "pulpo gallego": "gallega",
+    "empanada gallega": "gallega", "percebes": "gallega",
     # Vasca
     "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
     "pintxos": "vasca", "pintxo": "vasca", "txangurro": "vasca", "marmitako": "vasca",
