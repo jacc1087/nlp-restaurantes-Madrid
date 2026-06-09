@@ -1307,7 +1307,15 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             df_famosos["_es_landmark"] = ids_int[mask].isin(ICONICOS_PRIMERO).astype(int) * 100
             df_famosos["_score_final"] = df_famosos["_score_final"] + df_famosos["_es_landmark"]
             df_top = df_famosos.sort_values("_score_final", ascending=False).head(8)
-            restaurantes = [_fila_a_restaurante(row) for _, row in df_top.iterrows()]
+            from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+            filas_f = [(row, None) for _, row in df_top.iterrows()]
+            restaurantes_f = [None] * len(filas_f)
+            def _c(args): r = _fila_a_restaurante(args[0]); r["tokens"] = tokens; return r
+            with ThreadPoolExecutor(max_workers=min(len(filas_f), 8)) as ex:
+                fut_map = {ex.submit(_c, f): i for i, f in enumerate(filas_f)}
+                for fut in _as_completed(fut_map):
+                    restaurantes_f[fut_map[fut]] = fut.result()
+            restaurantes = [r for r in restaurantes_f if r]
             meta = {"cocina": None, "zona": zona_coords, "criterios": criterios, "n_total": len(df_famosos), "famosos": True, "tokens": tokens}
             return restaurantes, meta
 
@@ -1400,14 +1408,34 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         n_resultados = 8
     df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
 
-    restaurantes = []
+    # Construir lista de (row, dist_km) para paralelizar
+    filas = []
     for _, row in df_top.iterrows():
         dist_km = None
         if zona_coords and pd.notna(row.get("_dist_zona")) and row["_dist_zona"] < 999.0:
             dist_km = row["_dist_zona"]
+        filas.append((row, dist_km))
+
+    # Llamadas a Gemini en paralelo para reducir latencia
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    def _construir(args):
+        row, dist_km = args
         r = _fila_a_restaurante(row, distancia_km=dist_km)
-        r["tokens"] = tokens  # tokens de la búsqueda para que el frontend destaque el plato
-        restaurantes.append(r)
+        r["tokens"] = tokens
+        return r
+
+    restaurantes = [None] * len(filas)
+    with ThreadPoolExecutor(max_workers=min(len(filas), 8)) as executor:
+        futuros = {executor.submit(_construir, f): i for i, f in enumerate(filas)}
+        for futuro in as_completed(futuros):
+            idx = futuros[futuro]
+            try:
+                restaurantes[idx] = futuro.result()
+            except Exception as e:
+                print(f"  [parallel] error fila {idx}: {e}")
+                restaurantes[idx] = _fila_a_restaurante(filas[idx][0], distancia_km=filas[idx][1])
+                restaurantes[idx]["tokens"] = tokens
+    restaurantes = [r for r in restaurantes if r is not None]
 
     meta = {
         "cocina": cocina,
