@@ -830,6 +830,11 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         return 0.0
 
     # Cocinas sin categoría especial (gallega, vasca, madrileña, etc.) → lógica original por platos
+    # PERO primero comprobar cocina_detectada — es la señal más fiable
+    cocina_rest = _norm(str(row.get('cocina_detectada', '') or ''))
+    if cocina_rest == _norm(cocina):
+        return 10.0 + _score_calidad(row) * 0.5
+
     MIN_PLATOS_COCINA = 3
 
     PLATOS_COCINA = {
