@@ -72,7 +72,38 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         "algo con terraza → con terraza\n"
         "sitios conocidos de madrid → restaurantes famosos\n"
         "quiero comida vasca → cocina vasca\n"
-        "un buen peruano → cocina peruana\n\n"
+        "un buen peruano → cocina peruana\n"
+        "quiero cocido madrileño → cocido madrileño\n"
+        "busco un restaurante castizo → cocina madrileña\n"
+        "quiero callos a la madrileña → callos\n"
+        "quiero gallinejas → gallinejas\n"
+        "me apetece oreja a la plancha → oreja\n"
+        "quiero un chuletón de vaca rubia gallega → chuletón\n"
+        "quiero carne de vaca rubia gallega → asador\n"
+        "me apetece un chuletón → chuletón\n"
+        "quiero comer carne a la brasa → asador\n"
+        "busco un buen asador → asador\n"
+        "quiero un lechazo → lechazo\n"
+        "quiero cordero asado → asador\n"
+        "quiero comer marisco → marisco\n"
+        "una marisquería → marisco\n"
+        "me apetecen unas ostras → marisco\n"
+        "quiero percebes → marisco\n"
+        "quiero una paella → paella\n"
+        "vamos a una arrocería → arroceria\n"
+        "quiero un arroz con bogavante → arroz con bogavante\n"
+        "me apetece una fideuá → fideuá\n"
+        "quiero una hamburguesa → hamburguesa\n"
+        "busco una hamburguesería → hamburguesa\n"
+        "quiero tapas → tapas\n"
+        "busco un sitio de tapas → tapas\n"
+        "quiero sushi → cocina japonesa\n"
+        "busco un sitio de ramen → ramen\n"
+        "quiero curry → cocina india\n"
+        "quiero tacos → cocina mexicana\n"
+        "busco un buen ceviche → ceviche\n"
+        "quiero fusión → cocina fusión\n"
+        "alta cocina en madrid → cocina fusión\n\n"
         "REGLAS:\n"
         "- Cocina/gastronomía de un país o región: SIEMPRE devuelve 'cocina X' (cocina gallega, cocina italiana...)\n"
         "- Plato concreto: solo el nombre del plato\n"
@@ -111,6 +142,107 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
         print(f"  [Gemini normalizer] error: {e}")
 
     return consulta
+
+
+def _generar_resumen_gemini(row) -> str:
+    """
+    Genera un párrafo de ~100 palabras basado en reseñas reales del restaurante.
+    """
+    if not _GEMINI_KEY:
+        return ""
+
+    nombre       = str(row.get("nombre", "") or "")
+    id_rest      = str(row.get("id_restaurante", "") or "")
+    n            = int(row.get("n_resenas", 0) or 0)
+    pct_pos      = float(row.get("pct_positivo", 0) or 0)
+    val          = float(row.get("valoracion_google", 0) or 0)
+    platos_raw   = str(row.get("todos_platos", "") or "")
+    terminos     = str(row.get("terminos_tfidf", "") or "")
+    comida_avg   = float(row.get("comida_avg_stars", 0) or 0)
+    servicio_avg = float(row.get("servicio_avg_stars", 0) or 0)
+    precio_avg   = float(row.get("precio_avg_stars", 0) or 0)
+    criterio_terraza   = bool(row.get("criterio_terraza", False))
+    criterio_romantico = bool(row.get("criterio_romantico", False))
+    criterio_ninos     = bool(row.get("criterio_ninos", False))
+
+    # Cargar reseñas reales del CSV
+    resenas_texto = ""
+    try:
+        import os as _os
+        base_dir = _os.path.dirname(_os.path.abspath(__file__))
+        ruta = _os.path.join(base_dir, "resenas_unificadas.csv")
+        if _os.path.exists(ruta):
+            import pandas as _pd
+            df_r = _pd.read_csv(ruta)
+            mask = df_r["Id_Restaurante"].astype(str) == id_rest
+            if not mask.any():
+                mask = df_r["Restaurante"].str.lower() == nombre.lower()
+            resenas = df_r[mask]["Review"].dropna().tolist()
+            resenas_ord = sorted(resenas, key=len, reverse=True)[:8]
+            resenas_texto = "\n".join(f"- {r[:200]}" for r in resenas_ord)
+    except Exception as e:
+        print(f"  [resenas] error: {e}")
+
+    platos_top = ", ".join(platos_raw.split(",")[:6]).strip() if platos_raw and platos_raw != "nan" else ""
+    criterios = []
+    if criterio_terraza:   criterios.append("terraza")
+    if criterio_romantico: criterios.append("ambiente romántico")
+    if criterio_ninos:     criterios.append("apto para niños")
+
+    prompt = (
+        f"Eres un crítico gastronómico de Madrid. Basándote EXCLUSIVAMENTE en las reseñas "
+        f"reales que te doy, escribe UN PÁRRAFO de entre 80 y 100 palabras que describa "
+        f"la experiencia en '{nombre}'.\n\n"
+        f"DATOS:\n"
+        f"- Valoración: {val}/5 ({pct_pos:.0f}% positivas, {n} reseñas)\n"
+        f"- Platos más mencionados: {platos_top}\n"
+    )
+    if comida_avg > 0:
+        prompt += f"- Comida {comida_avg:.1f}/5"
+        if servicio_avg > 0: prompt += f" | Servicio {servicio_avg:.1f}/5"
+        if precio_avg  > 0: prompt += f" | Precio {precio_avg:.1f}/5"
+        prompt += "\n"
+    if criterios:
+        prompt += f"- Características: {', '.join(criterios)}\n"
+    if resenas_texto:
+        prompt += f"\nREDEÑAS REALES (usa estos detalles concretos):\n{resenas_texto}\n"
+
+    prompt += (
+        f"\nINSTRUCCIONES:\n"
+        f"- Menciona platos concretos que aparezcan en las reseñas\n"
+        f"- Si hay nombres de personal mencionados, inclúyelos\n"
+        f"- Refleja el tono general que transmiten las reseñas\n"
+        f"- PROHIBIDO: experiencia, excepcional, gastronómica, imprescindible, único\n"
+        f"- Escribe en tercera persona, tono editorial, sin comillas\n"
+        f"- Solo el párrafo, nada más"
+    )
+
+    try:
+        import json as _json, urllib.request as _ureq
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 350},
+            "safetySettings": [],
+        }
+        data = _json.dumps(payload).encode()
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}")
+        req = _ureq.Request(url, data=data,
+                            headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=15)
+        result = _json.loads(resp.read().decode("utf-8"))
+        candidates = result.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            texto = "".join(p.get("text", "") for p in parts).strip().strip('"').strip("'")
+            if texto and len(texto) > 30:
+                print(f"  [Gemini] {nombre}: {texto[:80]}...")
+                return texto
+    except Exception as e:
+        print(f"  [Gemini resumen] error {nombre}: {e}")
+
+    return ""
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ESTADO GLOBAL
@@ -481,10 +613,7 @@ COCINAS = {
                     "ceviche pacha", "pachamanquero", "suspiro limeno",
                     "leche de tigre", "chicharron peruano"],
 
-    # Española clásica
-    "española":    ["paella", "cocido madrileno", "fabada", "gazpacho", "salmorejo",
-                    "patatas bravas", "croquetas jamon", "tortilla española", "pisto manchego",
-                    "rabo de toro", "chuleton", "callos madrilenos", "oreja"],
+
 
     # Asturiana: platos muy específicos
     "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
@@ -548,24 +677,108 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
+    # Mexicana
     "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    "tacos": "mexicana", "taqueria": "mexicana", "burrito": "mexicana", "burritos": "mexicana",
+    "fajitas": "mexicana", "guacamole": "mexicana", "quesadilla": "mexicana",
+    # Italiana
     "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
+    "pasta": "italiana", "pizza": "italiana", "pizzeria": "italiana",
+    "trattoria": "italiana", "carbonara": "italiana", "lasana": "italiana", "lasaña": "italiana",
+    "risotto": "italiana", "tiramisu": "italiana", "tiramisú": "italiana",
+    # Japonesa
     "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa",
+    "sushi": "japonesa", "ramen": "japonesa", "gyozas": "japonesa", "tempura": "japonesa",
+    "sashimi": "japonesa", "udon": "japonesa", "japonés": "japonesa",
+    # India
     "indio": "india", "india": "india", "hindu": "india",
+    "curry": "india", "tikka": "india", "tikka masala": "india",
+    "naan": "india", "biryani": "india", "tandoori": "india",
+    # Peruana
     "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española",
+    "ceviche": "peruana", "lomo saltado": "peruana", "tiradito": "peruana",
+    "causa": "peruana", "anticuchos": "peruana",
+    # Madrileña
+    "madrileno": "madrileña", "madrilena": "madrileña",
+    "madrileño": "madrileña", "madrileña": "madrileña",
+    "cocido": "madrileña", "cocido madrileño": "madrileña", "callos": "madrileña",
+    "oreja": "madrileña", "oreja a la plancha": "madrileña",
+    "gallinejas": "madrileña", "entresijos": "madrileña",
+    "caracoles": "madrileña", "sesos": "madrileña",
+    "manitas": "madrileña", "manitas de cerdo": "madrileña",
+    "cocina castiza": "madrileña", "castizo": "madrileña", "castiza": "madrileña",
+    "taberna castiza": "madrileña", "cocina madrileña": "madrileña",
+    # Asturiana
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
+    "cachopo": "asturiana", "fabada": "asturiana", "sidra": "asturiana",
+    # Gallega
+    "gallego": "gallega", "galicia": "gallega",
+    "cocina gallega": "gallega", "comida gallega": "gallega",
+    "restaurante gallego": "gallega", "pulpo gallego": "gallega",
+    "empanada gallega": "gallega", "percebes": "gallega",
+    # Vasca
     "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
+    "pintxos": "vasca", "pintxo": "vasca", "txangurro": "vasca", "marmitako": "vasca",
+    # Francesa
     "frances": "francesa", "francesa": "francesa", "francia": "francesa",
+    # Griega
     "griego": "griega", "griega": "griega", "grecia": "griega",
+    "gyros": "griega", "souvlaki": "griega", "moussaka": "griega",
+    # Árabe
     "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
+    "falafel": "arabe", "shawarma": "arabe", "hummus": "arabe", "kebab": "arabe",
+    # Venezolana
     "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
+    "arepa": "venezolana", "arepas": "venezolana", "tequeños": "venezolana",
+    # Colombiana
     "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
+    # China
     "chino": "china", "china": "china",
-    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
+    "dim sum": "china", "wonton": "china", "dumplings": "china",
+    # Tailandesa
+    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa",
+    "thai": "tailandesa", "pad thai": "tailandesa", "tom yum": "tailandesa",
+    # Americana / Hamburguesería
     "americano": "americana", "americana": "americana", "usa": "americana",
+    "hamburguesa": "americana", "hamburguesas": "americana", "burger": "americana",
+    "smash burger": "americana", "hamburgueseria": "americana",
+    # Argentina / Asador
+    "argentino": "argentina",
+    "asador": "asador", "asadores": "asador",
+    "chuleton": "asador", "chuletón": "asador",
+    "lechazo": "asador", "cordero asado": "asador", "cordero": "asador",
+    "carne a la brasa": "asador", "parrilla": "asador",
+    "entrana": "asador", "entraña": "asador",
+    "buey": "asador", "lomo alto": "asador",
+    # Marisquería
+    "marisco": "marisqueria", "mariscos": "marisqueria",
+    "marisqueria": "marisqueria", "marisquería": "marisqueria",
+    "percebes": "marisqueria", "ostras": "marisqueria", "vieiras": "marisqueria",
+    "bogavante": "marisqueria", "langosta": "marisqueria", "carabineros": "marisqueria",
+    "navajas": "marisqueria", "zamburinas": "marisqueria", "zamburiñas": "marisqueria",
+    # Arrocería / Paella
+    "arroceria": "arroceria", "arrocería": "arroceria",
+    "paella": "arroceria", "paellas": "arroceria",
+    "arroz": "arroceria", "arroces": "arroceria",
+    "arroz con bogavante": "arroceria", "arroz negro": "arroceria",
+    "fideuá": "arroceria", "fideua": "arroceria",
+    # Andaluza
+    "andaluz": "andaluza", "andaluza": "andaluza", "andalucia": "andaluza",
+    "andalucía": "andaluza", "sevilla": "andaluza", "sevillano": "andaluza",
+    "gaditano": "andaluza", "gaditana": "andaluza", "cadiz": "andaluza",
+    "pescaito": "andaluza", "salmorejo": "andaluza", "cola de toro": "andaluza",
+    # Catalana
+    "catalan": "catalana", "catalana": "catalana", "cataluña": "catalana",
+    # Taberna / Tapas
+    "taberna": "taberna", "tapas": "taberna", "de tapas": "taberna",
+    "bar de tapas": "taberna", "tasca": "taberna", "vermut": "taberna",
+    "pinchos": "taberna",
+    # Mediterránea
     "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+    # Fusión
+    "fusion": "fusion", "fusión": "fusion",
+    "alta cocina": "fusion", "cocina creativa": "fusion",
+    "estrella michelin": "fusion", "michelin": "fusion",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -701,8 +914,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro", "marmitako",
                         "kokotxas", "txakoli", "chipirones en su tinta", "merluza en salsa verde",
                         "bacalao", "merluza", "anchoas"],
-        "asturiana":   ["cachopo", "fabada", "oricios", "pote asturiano", "cabrales",
-                        "casadielles", "sidra"],
+        "asturiana":   ["cachopo", "cachopu", "fabada", "fabada asturiana", "oricios",
+                        "pote asturiano", "cabrales", "casadielles", "sidra",
+                        "verdinas", "compango", "frixuelos", "tortos"],
         "india":       ["tikka masala", "biryani", "naan", "samosa", "korma", "dal", "tandoori",
                         "chapati", "pakora", "butter chicken", "palak paneer", "chana masala",
                         "lassi", "dosa", "saag"],
@@ -725,9 +939,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                         "som tam", "larb", "mango sticky rice", "khao pad"],
         "americana":   ["smash burger", "pulled pork", "costillas bbq", "mac and cheese",
                         "chicken wings", "brisket", "coleslaw", "brownie", "costillar"],
-        "española":    ["cocido madrileno", "fabada", "croquetas", "tortilla", "rabo de toro",
-                        "callos", "oreja", "patatas bravas", "gazpacho", "salmorejo", "paella",
-                        "jamon", "chorizo", "pisto"],
+        "madrileña":   ["cocido madrileño", "cocido madrileno", "cocido", "callos", "callos madrileños",
+                        "bocadillo calamares", "soldaditos pavia", "migas"],
+
     }
 
     platos_def = PLATOS_COCINA.get(cocina, [])
@@ -902,9 +1116,9 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     # Platos frecuencia: {"croquetas": 34, "pulpo": 21}
     platos_frecuencia = _parsear_platos_frecuencia(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
 
-    # Generar resumen automático si no hay columna 'resumen'
-    resumen = str(row.get("resumen", "") or "")
-    if not resumen or resumen == "nan":
+    # Generar resumen con Gemini basado en reseñas reales
+    resumen = _generar_resumen_gemini(row)
+    if not resumen:
         pct = float(row.get("pct_positivo", 0) or 0)
         n = int(row.get("n_resenas", 0) or 0)
         platos_top = platos_destacados[:3]
@@ -1098,12 +1312,8 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             return restaurantes, meta
 
     # FILTRO ESTRICTO POR COCINA: aplicar ANTES de cualquier otra lógica.
-    # Si se pide una cocina específica y un restaurante no tiene >= 4 platos de esa
-    # cocina (_score_match == 0), se excluye sin excepción. No se rellena con
-    # restaurantes genéricos: si no hay ninguno, se devuelve lista vacía.
     if cocina:
         df_filtrado = df_filtrado[df_filtrado["_score_match"] > 0]
-        # Si tras el filtro no queda ningún restaurante → devolver vacío inmediatamente
         if df_filtrado.empty:
             return [], {"cocina": cocina, "zona": zona_coords, "criterios": criterios, "n_total": 0}
 
@@ -1195,7 +1405,9 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         dist_km = None
         if zona_coords and pd.notna(row.get("_dist_zona")) and row["_dist_zona"] < 999.0:
             dist_km = row["_dist_zona"]
-        restaurantes.append(_fila_a_restaurante(row, distancia_km=dist_km))
+        r = _fila_a_restaurante(row, distancia_km=dist_km)
+        r["tokens"] = tokens  # tokens de la búsqueda para que el frontend destaque el plato
+        restaurantes.append(r)
 
     meta = {
         "cocina": cocina,
@@ -1263,14 +1475,29 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
                 meta_linea += f" · {from_mapa.get(r['rango_precio'], r['rango_precio'])}"
             lineas.append(meta_linea)
             if resumen:
-                lineas.append(resumen[:120] + ("..." if len(resumen) > 120 else ""))
+                lineas.append(resumen)
             if platos:
                 lineas.append(f"🍽️ Platos: {', '.join(platos[:4])}")
             lineas.append("")
         return "\n".join(lineas).strip()
 
+    ETIQUETAS_COCINA = {
+        'taberna': 'tabernas', 'asador': 'asadores',
+        'marisqueria': 'marisquerías', 'arroceria': 'arrocerías',
+        'hamburgueseria': 'hamburgueserías', 'fusion': 'cocina fusión',
+        'gallega': 'cocina gallega', 'vasca': 'cocina vasca',
+        'asturiana': 'cocina asturiana', 'madrileña': 'cocina madrileña',
+        'andaluza': 'cocina andaluza', 'italiana': 'cocina italiana',
+        'japonesa': 'cocina japonesa', 'india': 'cocina india',
+        'mexicana': 'cocina mexicana', 'peruana': 'cocina peruana',
+        'venezolana': 'cocina venezolana', 'argentina': 'cocina argentina',
+        'tailandesa': 'cocina tailandesa', 'arabe': 'cocina árabe',
+        'francesa': 'cocina francesa', 'griega': 'cocina griega',
+        'china': 'cocina china', 'colombiana': 'cocina colombiana',
+        'americana': 'cocina americana',
+    }
     if cocina:
-        intro_parts.append(f"cocina {cocina}")
+        intro_parts.append(ETIQUETAS_COCINA.get(cocina, f'cocina {cocina}'))
     if criterios:
         etiquetas = {
             "romantico": "ambiente romántico", "ninos": "apto para niños",
@@ -1318,8 +1545,7 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
         # Resumen breve
         if resumen:
             # Truncar a 120 chars para que quede limpio
-            resumen_corto = resumen[:120] + ("..." if len(resumen) > 120 else "")
-            lineas.append(resumen_corto)
+            lineas.append(resumen)
 
         # Platos destacados (con menciones si disponibles)
         if platos:
