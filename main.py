@@ -145,18 +145,16 @@ def _normalizar_consulta_gemini(consulta: str) -> str:
 
 
 def _generar_resumen_gemini(row) -> str:
-    """
-    Genera un párrafo de ~100 palabras basado en reseñas reales del restaurante.
-    """
     if not _GEMINI_KEY:
         return ""
 
     nombre       = str(row.get("nombre", "") or "")
-    id_rest      = str(row.get("id_restaurante", "") or "")
     n            = int(row.get("n_resenas", 0) or 0)
     pct_pos      = float(row.get("pct_positivo", 0) or 0)
     val          = float(row.get("valoracion_google", 0) or 0)
     platos_raw   = str(row.get("todos_platos", "") or "")
+    frases_raw   = str(row.get("servicio_frases", "") or "")
+    personal     = str(row.get("personal_destacado", "") or "")
     terminos     = str(row.get("terminos_tfidf", "") or "")
     comida_avg   = float(row.get("comida_avg_stars", 0) or 0)
     servicio_avg = float(row.get("servicio_avg_stars", 0) or 0)
@@ -165,63 +163,50 @@ def _generar_resumen_gemini(row) -> str:
     criterio_romantico = bool(row.get("criterio_romantico", False))
     criterio_ninos     = bool(row.get("criterio_ninos", False))
 
-    # Cargar reseñas reales del CSV
-    resenas_texto = ""
-    try:
-        import os as _os
-        base_dir = _os.path.dirname(_os.path.abspath(__file__))
-        ruta = _os.path.join(base_dir, "resenas_unificadas.csv")
-        if _os.path.exists(ruta):
-            import pandas as _pd
-            df_r = _pd.read_csv(ruta)
-            mask = df_r["Id_Restaurante"].astype(str) == id_rest
-            if not mask.any():
-                mask = df_r["Restaurante"].str.lower() == nombre.lower()
-            resenas = df_r[mask]["Review"].dropna().tolist()
-            resenas_ord = sorted(resenas, key=len, reverse=True)[:8]
-            resenas_texto = "\n".join(f"- {r[:200]}" for r in resenas_ord)
-    except Exception as e:
-        print(f"  [resenas] error: {e}")
+    # Fragmentos reales de reseñas (ya en el CSV)
+    frases = []
+    if frases_raw and frases_raw != "nan":
+        frases = [f.strip() for f in frases_raw.split("|") if len(f.strip()) > 20][:4]
 
-    platos_top = ", ".join(platos_raw.split(",")[:6]).strip() if platos_raw and platos_raw != "nan" else ""
+    # Platos top con menciones
+    platos_top = ", ".join(p.strip() for p in platos_raw.split(",")[:6] if p.strip()) if platos_raw and platos_raw != "nan" else ""
+
     criterios = []
     if criterio_terraza:   criterios.append("terraza")
     if criterio_romantico: criterios.append("ambiente romántico")
     if criterio_ninos:     criterios.append("apto para niños")
 
     prompt = (
-        f"Eres un crítico gastronómico de Madrid. Basándote EXCLUSIVAMENTE en las reseñas "
-        f"reales que te doy, escribe UN PÁRRAFO de entre 80 y 100 palabras que describa "
-        f"la experiencia en '{nombre}'.\n\n"
-        f"DATOS:\n"
-        f"- Valoración: {val}/5 ({pct_pos:.0f}% positivas, {n} reseñas)\n"
-        f"- Platos más mencionados: {platos_top}\n"
+        f"Restaurante '{nombre}' en Madrid.\n"
+        f"Datos extraídos de {n} reseñas reales de Google:\n"
+        f"- Valoración: {val}/5 — {pct_pos:.0f}% positivas\n"
+        f"- Platos más pedidos: {platos_top}\n"
     )
     if comida_avg > 0:
-        prompt += f"- Comida {comida_avg:.1f}/5"
-        if servicio_avg > 0: prompt += f" | Servicio {servicio_avg:.1f}/5"
-        if precio_avg  > 0: prompt += f" | Precio {precio_avg:.1f}/5"
-        prompt += "\n"
+        prompt += f"- Comida {comida_avg:.1f}/5 | Servicio {servicio_avg:.1f}/5 | Precio {precio_avg:.1f}/5\n"
+    if personal and personal != "nan":
+        prompt += f"- Personal destacado por clientes: {personal[:120]}\n"
+    if terminos and terminos != "nan":
+        prompt += f"- Términos más repetidos por clientes: {terminos}\n"
     if criterios:
-        prompt += f"- Características: {', '.join(criterios)}\n"
-    if resenas_texto:
-        prompt += f"\nREDEÑAS REALES (usa estos detalles concretos):\n{resenas_texto}\n"
+        prompt += f"- Destacado: {', '.join(criterios)}\n"
+    if frases:
+        prompt += "- Fragmentos literales de reseñas:\n"
+        for f in frases:
+            prompt += f'  · "{f[:180]}"\n'
 
     prompt += (
-        f"\nINSTRUCCIONES:\n"
-        f"- Menciona platos concretos que aparezcan en las reseñas\n"
-        f"- Si hay nombres de personal mencionados, inclúyelos\n"
-        f"- Refleja el tono general que transmiten las reseñas\n"
-        f"- PROHIBIDO: experiencia, excepcional, gastronómica, imprescindible, único\n"
-        f"- Escribe en tercera persona, tono editorial, sin comillas\n"
-        f"- Solo el párrafo, nada más"
+        "\nEscribe UN párrafo de exactamente 3 frases que describa este restaurante. "
+        "Usa detalles concretos: platos reales, nombres de personal si los hay, tono general. "
+        "PROHIBIDO: revela, joya, auténtica, excepcional, gastronómica, imprescindible. "
+        "Sin comillas. Solo el párrafo."
     )
 
     try:
         import json as _json, urllib.request as _ureq
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 350},
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 300},
             "safetySettings": [],
         }
         data = _json.dumps(payload).encode()
@@ -229,70 +214,18 @@ def _generar_resumen_gemini(row) -> str:
                f"{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}")
         req = _ureq.Request(url, data=data,
                             headers={"Content-Type": "application/json"}, method="POST")
-        resp = _ureq.urlopen(req, timeout=15)
+        resp = _ureq.urlopen(req, timeout=12)
         result = _json.loads(resp.read().decode("utf-8"))
         candidates = result.get("candidates", [])
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
             texto = "".join(p.get("text", "") for p in parts).strip().strip('"').strip("'")
             if texto and len(texto) > 30:
-                print(f"  [Gemini] {nombre}: {texto[:80]}...")
+                print(f"  [Gemini] {nombre}: OK ({len(texto)} chars)")
                 return texto
     except Exception as e:
         print(f"  [Gemini resumen] error {nombre}: {e}")
-
     return ""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ESTADO GLOBAL
-# ═══════════════════════════════════════════════════════════════════════════════
-
-df_global: Optional[pd.DataFrame] = None
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FASTAPI APP
-# ═══════════════════════════════════════════════════════════════════════════════
-
-app = FastAPI(
-    title="API Recomendación Restaurantes Madrid",
-    description="Sistema de recomendación basado en NLP local (nlptown/bert)",
-    version="2.0.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MODELOS PYDANTIC
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class MensajeHistorial(BaseModel):
-    role: str
-    content: str
-
-
-class ConsultaRequest(BaseModel):
-    consulta: str
-    historial: Optional[List[MensajeHistorial]] = []
-
-
-class RecomendacionResponse(BaseModel):
-    respuesta: str
-    proyecto: str
-    restaurantes: Optional[List[dict]] = []
-    consulta_usuario: Optional[str] = ""
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# CARGA Y PREPARACIÓN DE DATOS
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def _parsear_lista(val) -> list:
     """Convierte string de lista Python/JSON a lista real."""
