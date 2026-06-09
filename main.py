@@ -1513,7 +1513,7 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
                 meta_linea += f" · {from_mapa.get(r['rango_precio'], r['rango_precio'])}"
             lineas.append(meta_linea)
             if resumen:
-                lineas.append(resumen[:120] + ("..." if len(resumen) > 120 else ""))
+                lineas.append(resumen)
             if platos:
                 lineas.append(f"🍽️ Platos: {', '.join(platos[:4])}")
             lineas.append("")
@@ -1582,9 +1582,7 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
 
         # Resumen breve
         if resumen:
-            # Truncar a 120 chars para que quede limpio
-            resumen_corto = resumen[:120] + ("..." if len(resumen) > 120 else "")
-            lineas.append(resumen_corto)
+            lineas.append(resumen)
 
         # Platos destacados (con menciones si disponibles)
         if platos:
