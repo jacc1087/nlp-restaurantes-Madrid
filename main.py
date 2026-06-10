@@ -962,15 +962,13 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     if len(df_filtrado) < 3 and len(criterios) > 0:
         df_filtrado = df.copy()
 
-    # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
+    # ── Filtrar hard por cocina — sin excepciones ────────────────────────────
+    # Si el usuario pidió una cocina concreta, solo salen restaurantes que
+    # tienen platos identificativos de esa cocina (score_match > 0).
+    # No se rellena con restaurantes de otra cocina aunque tengan mejor valoración.
     if cocina:
-        # Solo incluir restaurantes que superaron el umbral de platos (score > 0)
         df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
-        if len(df_con_match) >= 3:
-            df_filtrado = df_con_match
-        elif len(df_con_match) > 0:
-            # Si hay menos de 3 con score > 0, los mostramos igualmente (son los únicos relevantes)
-            df_filtrado = df_con_match
+        df_filtrado = df_con_match  # puede ser vacío → _generar_respuesta lo gestiona
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
     n_resultados = 6 if (cocina or tokens or criterios) else 8
@@ -1003,6 +1001,13 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     No usa LLM — es determinista y rápido.
     """
     if not restaurantes:
+        cocina_vacia = meta.get("cocina")
+        if cocina_vacia:
+            return (
+                f"No tengo en mi base de datos restaurantes de cocina {cocina_vacia} "
+                f"con suficientes platos identificativos de esa cocina. "
+                f"Prueba con una búsqueda más amplia o consulta por un plato concreto."
+            )
         return (
             "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
             "Prueba con otros términos: tipo de cocina, plato concreto, zona de Madrid o criterios como terraza, niños, mascotas..."
