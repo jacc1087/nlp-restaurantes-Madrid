@@ -526,7 +526,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     señales de platos propios, O tener nombre_bonus + al menos 1 plato
     (propio o común). Sin eso, score = 0.
     """
-    MIN_SEÑALES_PROPIAS = 2  # mínimo de platos propios para puntuar sin nombre_bonus
+    # Para cocinas con platos que también aparecen en restaurantes genéricos de marisco
+    # (gallega, vasca) se exige más señal propia para evitar falsos positivos.
+    MIN_SEÑALES_PROPIAS = 3 if cocina in ("gallega", "vasca") else 2
 
     # Platos propios (muy identificativos) y comunes (necesitan contexto)
     PLATOS_PROPIOS = {
@@ -635,20 +637,26 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         nombre_bonus = max(nombre_bonus, 8.0)
 
     # Contar platos propios encontrados
+    # Para gallega/vasca exigimos ≥ 2 menciones por plato para evitar que
+    # un restaurante de mariscos genérico se cuele (zamburiñas con 1 mención).
+    MIN_MENCIONES_PROPIO = 2 if cocina in ("gallega", "vasca") else 1
     señales_propias = 0
     score_propios = 0.0
     for plato in propios_def:
         plato_norm = _norm(plato)
         if plato_norm in fuente:
-            señales_propias += 1
-            score_propios += 3.0
             po = next(
                 (p for p in platos_lista
                  if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
                 None
             )
-            if po and po["menciones"] > 1:
-                score_propios += math.log2(po["menciones"])
+            menciones = po["menciones"] if po else 1
+            if menciones < MIN_MENCIONES_PROPIO:
+                continue   # descartamos señal débil
+            señales_propias += 1
+            score_propios += 3.0
+            if menciones > 1:
+                score_propios += math.log2(menciones)
 
     # Platos comunes: solo suman si hay contexto (platos propios O nombre_bonus)
     score_comunes = 0.0
@@ -755,10 +763,28 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     """
     # Platos destacados: convertir "croquetas(34), pulpo(21)" → ["croquetas", "pulpo"]
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
+
+    # Filtrar nombres del personal para que no aparezcan como platos
+    personal_str = str(row.get("personal_destacado", "") or "")
+    nombres_personal = set()
+    for parte in personal_str.split(","):
+        nombre = re.sub(r'\(\d+\)$', '', parte).strip().lower()
+        if nombre and nombre != "nan":
+            nombres_personal.add(nombre)
+            # También añadir partes individuales del nombre (ej: "yenifer adrián" → {"yenifer", "adrián"})
+            for token in nombre.split():
+                if len(token) > 3:
+                    nombres_personal.add(token)
+
+    platos_lista = [
+        p for p in platos_lista
+        if p["nombre"].lower() not in nombres_personal
+        and not any(tok in nombres_personal for tok in p["nombre"].lower().split())
+    ]
     platos_destacados = [p["nombre"] for p in platos_lista]
 
     # Platos frecuencia: {"croquetas": 34, "pulpo": 21}
-    platos_frecuencia = _parsear_platos_frecuencia(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
+    platos_frecuencia = {p["nombre"]: p["menciones"] for p in platos_lista}
 
     # Generar resumen automático si no hay columna 'resumen'
     resumen = str(row.get("resumen", "") or "")
