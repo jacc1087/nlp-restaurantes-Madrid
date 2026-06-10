@@ -526,9 +526,16 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     señales de platos propios, O tener nombre_bonus + al menos 1 plato
     (propio o común). Sin eso, score = 0.
     """
-    # Para cocinas con platos que también aparecen en restaurantes genéricos de marisco
-    # (gallega, vasca) se exige más señal propia para evitar falsos positivos.
+    # Para gallega y vasca exigimos más señales propias (más fácil tener 1 plato de marisco suelto)
     MIN_SEÑALES_PROPIAS = 3 if cocina in ("gallega", "vasca") else 2
+
+    # Platos tan exclusivos que con 1 mención ya son señal válida
+    PLATOS_HIPERID = {
+        "gallega": {"percebes", "vieiras", "filloas", "tetilla", "pote gallego",
+                    "zorza", "caldo gallego", "lacon", "grelos", "albarino", "ribeiro"},
+        "vasca":   {"pintxos", "pintxo", "gilda", "txangurro", "kokotxas",
+                    "marmitako", "txakoli"},
+    }
 
     # Platos propios (muy identificativos) y comunes (necesitan contexto)
     PLATOS_PROPIOS = {
@@ -630,15 +637,22 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
             nombre_bonus = 5.0
             break
 
+    # Bonus fuerte si cocina_detectada del CSV coincide con la cocina buscada
+    # Esto respeta el trabajo ya hecho por analizar_todos_restaurantes.py
+    cocina_detectada_csv = _norm(str(row.get("cocina_detectada", "") or ""))
+    cocina_ascii = _norm(cocina)
+    if cocina_detectada_csv and (cocina_ascii in cocina_detectada_csv or cocina_detectada_csv in cocina_ascii):
+        nombre_bonus = max(nombre_bonus, 10.0)
+
     # Bonus por columna tipo_cocina si existe en el CSV
     tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
-    cocina_ascii = _norm(cocina)
     if tipo and (cocina_ascii in tipo or tipo in cocina_ascii):
         nombre_bonus = max(nombre_bonus, 8.0)
 
     # Contar platos propios encontrados
-    # Para gallega/vasca exigimos ≥ 2 menciones por plato para evitar que
-    # un restaurante de mariscos genérico se cuele (zamburiñas con 1 mención).
+    # Para gallega/vasca, platos genéricos de marisco (zamburiñas) necesitan ≥ 2 menciones.
+    # Platos hiper-identificativos (percebes, vieiras, filloas...) valen con 1 mención.
+    hiperid = PLATOS_HIPERID.get(cocina, set())
     MIN_MENCIONES_PROPIO = 2 if cocina in ("gallega", "vasca") else 1
     señales_propias = 0
     score_propios = 0.0
@@ -651,8 +665,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                 None
             )
             menciones = po["menciones"] if po else 1
-            if menciones < MIN_MENCIONES_PROPIO:
-                continue   # descartamos señal débil
+            min_men = 1 if plato in hiperid else MIN_MENCIONES_PROPIO
+            if menciones < min_men:
+                continue   # señal demasiado débil
             señales_propias += 1
             score_propios += 3.0
             if menciones > 1:
