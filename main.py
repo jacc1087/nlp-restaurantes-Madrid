@@ -3,7 +3,7 @@ main.py — Backend FastAPI para el sistema de recomendación de restaurantes de
 
 Arquitectura:
   · Motor NLP determinista (nlptown/bert + análisis local) → gratuito, sin API
-  · RAG semántico (ChromaDB + sentence-transformers) → fallback cuando NLP no ancla
+  · RAG semántico (ChromaDB + Gemini embeddings) → fallback cuando NLP no ancla
   · Agente LangGraph → coordina ambos caminos y mantiene historial de conversación
   · Gemini Flash → solo se invoca cuando el NLP falla (≈ 0.009 €/consulta RAG)
 
@@ -1124,12 +1124,81 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 CHROMA_DIR       = os.path.join(BASE_DIR, "chroma_db")
-EMBEDDING_MODEL  = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 COLLECTION_NAME  = "restaurantes_resenas"
 MAX_RESENAS_RAG  = 40   # reseñas por restaurante incluidas en el índice
+GEMINI_EMBED_MODEL = "models/embedding-001"  # gratuito, 1500 req/día, sin descarga
 
 # Instancia global de la colección ChromaDB (carga lazy en primer uso)
 _chroma_collection = None
+
+
+def _gemini_embed(textos: list[str]) -> list[list[float]]:
+    """
+    Genera embeddings usando Gemini embedding-001.
+    Gratuito (1500 req/día), sin descarga de modelo, funciona en Render free.
+    Devuelve lista de vectores float. Si falla, devuelve vectores vacíos.
+    """
+    if not GEMINI_API_KEY:
+        return [[] for _ in textos]
+
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"{GEMINI_EMBED_MODEL}:batchEmbedContents?key={GEMINI_API_KEY}"
+    )
+
+    # Gemini embedding acepta lotes de hasta 100
+    LOTE = 100
+    todos_vectores = []
+
+    for i in range(0, len(textos), LOTE):
+        lote = textos[i:i + LOTE]
+        requests_body = {
+            "requests": [
+                {
+                    "model": GEMINI_EMBED_MODEL,
+                    "content": {"parts": [{"text": t}]},
+                    "taskType": "RETRIEVAL_DOCUMENT",
+                }
+                for t in lote
+            ]
+        }
+        data = json.dumps(requests_body).encode()
+        try:
+            req  = _ureq.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+            resp = _ureq.urlopen(req, timeout=30)
+            result = json.loads(resp.read())
+            vectores = [e["values"] for e in result.get("embeddings", [])]
+            todos_vectores.extend(vectores)
+        except Exception as e:
+            print(f"  ⚠️  Error embedding Gemini: {e}")
+            todos_vectores.extend([[] for _ in lote])
+        time.sleep(0.1)  # respetar rate limit
+
+    return todos_vectores
+
+
+def _gemini_embed_query(texto: str) -> list[float]:
+    """Embedding para una consulta (taskType RETRIEVAL_QUERY)."""
+    if not GEMINI_API_KEY:
+        return []
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"{GEMINI_EMBED_MODEL}:embedContent?key={GEMINI_API_KEY}"
+    )
+    data = json.dumps({
+        "model": GEMINI_EMBED_MODEL,
+        "content": {"parts": [{"text": texto}]},
+        "taskType": "RETRIEVAL_QUERY",
+    }).encode()
+    try:
+        req  = _ureq.Request(url, data=data,
+                             headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=15)
+        result = json.loads(resp.read())
+        return result.get("embedding", {}).get("values", [])
+    except Exception:
+        return []
 
 
 def _rag_construir_documento(row: pd.Series, resenas: list) -> str:
@@ -1181,10 +1250,8 @@ def rag_indexar(verbose: bool = True):
     """
     try:
         import chromadb
-        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
     except ImportError:
-        print("ERROR: Instala las dependencias RAG:")
-        print("  pip install chromadb sentence-transformers langgraph langchain-core")
+        print("ERROR: instala chromadb:  pip install chromadb langgraph langchain-core")
         return
 
     csv_analisis = os.path.join(BASE_DIR, "analisis_restaurantes.csv")
@@ -1217,9 +1284,11 @@ def rag_indexar(verbose: bool = True):
     if verbose:
         print(f"  {len(df_an)} restaurantes | {len(df_res)} reseñas")
 
-    ef     = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL, device="cpu")
-    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    if not GEMINI_API_KEY:
+        print("ERROR: necesitas GEMINI_API_KEY para indexar con embeddings de Gemini.")
+        return
 
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
     try:
         client.delete_collection(COLLECTION_NAME)
         if verbose:
@@ -1227,9 +1296,9 @@ def rag_indexar(verbose: bool = True):
     except Exception:
         pass
 
+    # ChromaDB sin embedding_function — gestionamos los embeddings manualmente
     col = client.create_collection(
         name=COLLECTION_NAME,
-        embedding_function=ef,
         metadata={"hnsw:space": "cosine"},
     )
 
@@ -1253,13 +1322,27 @@ def rag_indexar(verbose: bool = True):
             "pct_positivo":   float(row.get("pct_positivo", 0) or 0),
         })
 
+    # Generar embeddings con Gemini en lotes y añadir a ChromaDB
     LOTE = 50
     total = len(docs)
     if verbose:
-        print(f"Indexando {total} restaurantes (lotes de {LOTE})...")
+        print(f"Generando embeddings y indexando {total} restaurantes (lotes de {LOTE})...")
     for i in range(0, total, LOTE):
         fin = min(i + LOTE, total)
-        col.add(documents=docs[i:fin], ids=ids[i:fin], metadatas=metas[i:fin])
+        lote_docs  = docs[i:fin]
+        lote_ids   = ids[i:fin]
+        lote_metas = metas[i:fin]
+        embeddings = _gemini_embed(lote_docs)
+        # Filtrar entradas sin embedding válido
+        validos = [(d, id_, m, e) for d, id_, m, e in
+                   zip(lote_docs, lote_ids, lote_metas, embeddings) if e]
+        if validos:
+            col.add(
+                documents  = [v[0] for v in validos],
+                ids        = [v[1] for v in validos],
+                metadatas  = [v[2] for v in validos],
+                embeddings = [v[3] for v in validos],
+            )
         if verbose:
             print(f"  [{fin}/{total}]")
 
@@ -1312,35 +1395,37 @@ def _rag_clave(consulta: str) -> str:
 
 
 def _rag_get_collection():
-    """Carga ChromaDB de forma lazy (solo en el primer uso)."""
+    """Carga ChromaDB de forma lazy (solo en el primer uso). Sin modelo local."""
     global _chroma_collection
     if _chroma_collection is not None:
         return _chroma_collection
     try:
         import chromadb
-        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
     except ImportError:
         return None
 
     if not os.path.exists(CHROMA_DIR):
         return None
 
-    ef = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL, device="cpu")
     client = chromadb.PersistentClient(path=CHROMA_DIR)
     try:
-        _chroma_collection = client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
+        # Sin embedding_function: los embeddings se pasan manualmente en cada query
+        _chroma_collection = client.get_collection(name=COLLECTION_NAME)
     except Exception:
         _chroma_collection = None
     return _chroma_collection
 
 
 def _rag_buscar_semantico(consulta: str) -> list:
-    """Devuelve los N documentos más similares a la consulta."""
+    """Devuelve los N documentos más similares usando embedding de Gemini."""
     col = _rag_get_collection()
     if col is None:
         return []
+    embedding = _gemini_embed_query(consulta)
+    if not embedding:
+        return []
     try:
-        results = col.query(query_texts=[consulta], n_results=N_DOCS_RAG)
+        results = col.query(query_embeddings=[embedding], n_results=N_DOCS_RAG)
         docs = []
         for i in range(len(results["ids"][0])):
             docs.append({
