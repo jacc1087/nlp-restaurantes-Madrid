@@ -118,5 +118,1325 @@
     "vistas": false,
     "musica_directo": false,
     "romantico": false
+  },
+  "1": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "2": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "3": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "4": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "5": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "6": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "7": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "8": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "9": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "10": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "11": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "12": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "13": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "14": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "15": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "16": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "17": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "18": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "19": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "20": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "21": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "22": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "23": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "24": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "25": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "26": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "27": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "28": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "29": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "30": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "31": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "32": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "33": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "34": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "35": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "36": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "37": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "38": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "39": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "40": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "41": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "42": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "43": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "44": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "45": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "46": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "47": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "48": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "49": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "50": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "51": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "52": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "53": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "54": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "55": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "56": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "57": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "58": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "59": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "60": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "61": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "62": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "63": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "64": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "65": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "66": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "67": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "68": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "69": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "70": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": true,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "71": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "72": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "73": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "74": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "75": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "76": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "77": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "78": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "79": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "80": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "81": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "82": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "83": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "84": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "85": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "86": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "87": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "88": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "89": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "90": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "91": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "92": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "93": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "94": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "95": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "96": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "97": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "98": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "99": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "100": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "101": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "102": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "103": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "104": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "105": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "106": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "107": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "108": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "109": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "110": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "111": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "112": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "113": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "114": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "115": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "116": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "117": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "118": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "119": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "120": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "121": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "122": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "123": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "124": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "125": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "126": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "127": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "128": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "129": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "130": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": true,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "131": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "132": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "133": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "134": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "135": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "136": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "137": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": true,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "138": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "139": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "140": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "141": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "142": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "143": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "144": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "145": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "146": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "147": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "148": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "149": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": true
+  },
+  "150": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "151": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "152": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "153": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "154": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "155": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "156": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": true,
+    "romantico": false
+  },
+  "157": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "158": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "159": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "160": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "161": {
+    "ninos": false,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "162": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "163": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
+  },
+  "164": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": false,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": false
+  },
+  "165": {
+    "ninos": true,
+    "mascotas": true,
+    "terraza": true,
+    "vistas": false,
+    "musica_directo": false,
+    "romantico": true
   }
 }

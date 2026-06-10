@@ -1,34 +1,44 @@
 """
 main.py — Backend FastAPI para el sistema de recomendación de restaurantes de Madrid.
-Lógica de búsqueda del Proyecto B (nlptown/bert + análisis NLP local).
-Interfaz compatible con el frontend React del Proyecto A.
+
+Arquitectura:
+  · Motor NLP determinista (nlptown/bert + análisis local) → gratuito, sin API
+  · RAG semántico (ChromaDB + sentence-transformers) → fallback cuando NLP no ancla
+  · Agente LangGraph → coordina ambos caminos y mantiene historial de conversación
+  · Gemini Flash → solo se invoca cuando el NLP falla (≈ 0.009 €/consulta RAG)
 
 Modos de uso:
-  uvicorn main:app --reload        → servidor de desarrollo
-  uvicorn main:app --host 0.0.0.0  → producción (Railway)
+  uvicorn main:app --reload              → servidor de desarrollo
+  uvicorn main:app --host 0.0.0.0        → producción (Railway)
+
+Primera ejecución (indexar base vectorial):
+  python main.py --indexar
 
 Archivos necesarios en el mismo directorio:
-  analisis_restaurantes.csv        → generado por analizar_todos_restaurantes.py
-  ranking.csv                      → ranking original con Valoracion, Votaciones, Dirección
-  .cache_coords.json               → caché de coordenadas (generado por generar_agente.py)
+  analisis_restaurantes.csv   → generado por analizar_todos_restaurantes.py
+  resenas_unificadas.csv      → reseñas originales (para indexar en ChromaDB)
+  ranking.csv                 → ranking con Valoracion, Votaciones, Dirección
+  .cache_coords.json          → caché de coordenadas
 
-Variables de entorno opcionales:
-  GEMINI_API_KEY                   → no se usa en runtime, solo por compatibilidad
+Variables de entorno:
+  GEMINI_API_KEY              → para el fallback RAG (no obligatorio)
 """
 
 import os
 import re
+import sys
 import json
 import math
+import time
 import unicodedata
 import ast
-from typing import List, Optional
+import urllib.request as _ureq
+from typing import List, Optional, TypedDict
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1062,26 +1072,572 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     return "\n".join(lineas).strip()
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAG — INDEXACIÓN (ejecutar una vez: python main.py --indexar)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CHROMA_DIR       = os.path.join(BASE_DIR, "chroma_db")
+EMBEDDING_MODEL  = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+COLLECTION_NAME  = "restaurantes_resenas"
+MAX_RESENAS_RAG  = 40   # reseñas por restaurante incluidas en el índice
+
+# Instancia global de la colección ChromaDB (carga lazy en primer uso)
+_chroma_collection = None
+
+
+def _rag_construir_documento(row: pd.Series, resenas: list) -> str:
+    """
+    Texto que se indexa en ChromaDB para cada restaurante.
+    Combina el resumen estructurado del CSV con fragmentos de reseñas.
+    Compacto a propósito: chunks más pequeños = mejor recall semántico.
+    """
+    lineas = [f"Restaurante: {row.get('nombre', '')}"]
+
+    if row.get("cocina_detectada"):
+        lineas.append(f"Cocina: {row['cocina_detectada']}")
+    if row.get("tipo_establecimiento"):
+        lineas.append(f"Tipo: {row['tipo_establecimiento']}")
+    if row.get("top5_platos"):
+        lineas.append(f"Platos destacados: {row['top5_platos']}")
+    if row.get("personal_destacado"):
+        lineas.append(f"Personal destacado: {row['personal_destacado']}")
+
+    criterios = [
+        c.replace("criterio_", "")
+        for c in ["criterio_ninos", "criterio_mascotas", "criterio_terraza",
+                  "criterio_vistas", "criterio_musica_directo", "criterio_romantico"]
+        if str(row.get(c, "")).lower() == "true"
+    ]
+    if criterios:
+        lineas.append(f"Características: {', '.join(criterios)}")
+
+    if row.get("avg_estrellas_modelo"):
+        lineas.append(
+            f"Valoración modelo: {row['avg_estrellas_modelo']} estrellas "
+            f"({row.get('pct_positivo', 0)}% positivo)"
+        )
+
+    if resenas:
+        lineas.append("\nOpiniones:")
+        for r in resenas[:MAX_RESENAS_RAG]:
+            texto_limpio = re.sub(r'\s+', ' ', str(r)).strip()[:280]
+            lineas.append(f"- {texto_limpio}")
+
+    return "\n".join(lineas)
+
+
+def rag_indexar(verbose: bool = True):
+    """
+    Lee analisis_restaurantes.csv + resenas_unificadas.csv,
+    genera embeddings locales y persiste en ChromaDB.
+    Solo necesita ejecutarse una vez (o al añadir nuevas reseñas).
+    """
+    try:
+        import chromadb
+        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+    except ImportError:
+        print("ERROR: Instala las dependencias RAG:")
+        print("  pip install chromadb sentence-transformers langgraph langchain-core")
+        return
+
+    csv_analisis = os.path.join(BASE_DIR, "analisis_restaurantes.csv")
+    csv_resenas  = os.path.join(BASE_DIR, "resenas_unificadas.csv")
+
+    if not os.path.exists(csv_analisis):
+        print(f"ERROR: No se encuentra {csv_analisis}")
+        return
+
+    if verbose:
+        print("Cargando CSVs...")
+    df_an = pd.read_csv(csv_analisis)
+    df_an["id_restaurante"] = df_an["id_restaurante"].astype(str)
+
+    df_res = pd.DataFrame()
+    col_id_res = col_texto = None
+    if os.path.exists(csv_resenas):
+        df_res = pd.read_csv(csv_resenas)
+        for c in ["Id_Restaurante", "id_restaurante", "id"]:
+            if c in df_res.columns:
+                col_id_res = c
+                break
+        for c in ["Review", "review", "texto", "Texto"]:
+            if c in df_res.columns:
+                col_texto = c
+                break
+        if col_id_res:
+            df_res[col_id_res] = df_res[col_id_res].astype(str)
+
+    if verbose:
+        print(f"  {len(df_an)} restaurantes | {len(df_res)} reseñas")
+
+    ef     = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL, device="cpu")
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+    try:
+        client.delete_collection(COLLECTION_NAME)
+        if verbose:
+            print("  Colección anterior eliminada. Reindexando...")
+    except Exception:
+        pass
+
+    col = client.create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=ef,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    docs, ids, metas = [], [], []
+    for _, row in df_an.iterrows():
+        rid = str(row["id_restaurante"])
+        resenas = []
+        if col_id_res and col_texto and not df_res.empty:
+            resenas = (
+                df_res[df_res[col_id_res] == rid][col_texto]
+                .dropna().astype(str).tolist()
+            )
+        doc = _rag_construir_documento(row, resenas)
+        docs.append(doc)
+        ids.append(f"rest_{rid}")
+        metas.append({
+            "id_restaurante": rid,
+            "nombre":         str(row.get("nombre", "")),
+            "cocina":         str(row.get("cocina_detectada", "") or ""),
+            "valoracion":     float(row.get("avg_estrellas_modelo", 0) or 0),
+            "pct_positivo":   float(row.get("pct_positivo", 0) or 0),
+        })
+
+    LOTE = 50
+    total = len(docs)
+    if verbose:
+        print(f"Indexando {total} restaurantes (lotes de {LOTE})...")
+    for i in range(0, total, LOTE):
+        fin = min(i + LOTE, total)
+        col.add(documents=docs[i:fin], ids=ids[i:fin], metadatas=metas[i:fin])
+        if verbose:
+            print(f"  [{fin}/{total}]")
+
+    if verbose:
+        print(f"✔ Indexación completa → {CHROMA_DIR}")
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAG — RETRIEVAL + GEMINI FLASH
+# Gemini solo se llama cuando el NLP no encuentra resultados relevantes.
+# Caché en disco: consultas repetidas = coste cero.
+# Coste estimado por consulta RAG: ~0.009 € (900 tokens input, 400 output)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+GEMINI_API_KEY  = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL    = "gemini-2.5-flash"
+CACHE_RAG_PATH  = os.path.join(BASE_DIR, ".cache_rag_respuestas.json")
+N_DOCS_RAG      = 5       # documentos a recuperar de ChromaDB
+MAX_TOKENS_RAG  = 400     # tokens máximos de output Gemini
+
+# Caché en memoria — se carga una sola vez al arrancar
+_cache_rag: dict = {}
+
+
+def _rag_cargar_cache():
+    global _cache_rag
+    if os.path.exists(CACHE_RAG_PATH):
+        try:
+            with open(CACHE_RAG_PATH, "r", encoding="utf-8") as f:
+                _cache_rag = json.load(f)
+        except Exception:
+            _cache_rag = {}
+
+
+def _rag_guardar_cache():
+    try:
+        with open(CACHE_RAG_PATH, "w", encoding="utf-8") as f:
+            json.dump(_cache_rag, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _rag_clave(consulta: str) -> str:
+    """Normaliza la consulta para usarla como clave de caché."""
+    c = consulta.lower().strip()
+    c = unicodedata.normalize("NFD", c)
+    c = "".join(ch for ch in c if unicodedata.category(ch) != "Mn")
+    return re.sub(r"[\W_]+", " ", c).strip()
+
+
+def _rag_get_collection():
+    """Carga ChromaDB de forma lazy (solo en el primer uso)."""
+    global _chroma_collection
+    if _chroma_collection is not None:
+        return _chroma_collection
+    try:
+        import chromadb
+        from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+    except ImportError:
+        return None
+
+    if not os.path.exists(CHROMA_DIR):
+        return None
+
+    ef = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL, device="cpu")
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    try:
+        _chroma_collection = client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
+    except Exception:
+        _chroma_collection = None
+    return _chroma_collection
+
+
+def _rag_buscar_semantico(consulta: str) -> list:
+    """Devuelve los N documentos más similares a la consulta."""
+    col = _rag_get_collection()
+    if col is None:
+        return []
+    try:
+        results = col.query(query_texts=[consulta], n_results=N_DOCS_RAG)
+        docs = []
+        for i in range(len(results["ids"][0])):
+            docs.append({
+                "id":        results["ids"][0][i],
+                "documento": results["documents"][0][i],
+                "metadata":  results["metadatas"][0][i],
+                "distancia": results["distances"][0][i],
+            })
+        return docs
+    except Exception:
+        return []
+
+
+def _rag_gemini_call(prompt: str) -> str:
+    """Llamada directa a Gemini Flash. Sin dependencias externas (solo urllib)."""
+    if not GEMINI_API_KEY:
+        return ""
+    data = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": MAX_TOKENS_RAG},
+    }).encode()
+    url = (
+        f"https://generativelanguage.googleapis.com/v1/models/"
+        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
+    for intento in range(3):
+        try:
+            req  = _ureq.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+            resp = _ureq.urlopen(req, timeout=25)
+            result = json.loads(resp.read())
+            partes = result["candidates"][0]["content"]["parts"]
+            return " ".join(p.get("text", "") for p in partes if p.get("text")).strip()
+        except Exception as e:
+            if any(c in str(e) for c in ["503", "429", "500"]) and intento < 2:
+                time.sleep(2 ** (intento + 1))
+            else:
+                return ""
+    return ""
+
+
+def _rag_construir_prompt(consulta: str, docs: list, historial: list) -> str:
+    """Prompt compacto para minimizar tokens de entrada."""
+    contexto = "\n\n---\n\n".join(d["documento"][:650] for d in docs)
+
+    hist_texto = ""
+    if historial:
+        turnos = historial[-3:]  # máx 3 turnos para no inflar el prompt
+        hist_texto = "\nHistorial:\n" + "\n".join(
+            f"{'Usuario' if m['role'] == 'user' else 'Asistente'}: {m['content'][:180]}"
+            for m in turnos
+        ) + "\n"
+
+    return (
+        "Eres un asistente de recomendación de restaurantes de Madrid. "
+        "Responde en español, de forma breve y conversacional (máximo 4-5 oraciones). "
+        "Si la consulta no encaja con el contexto, dilo con naturalidad. "
+        "No inventes datos.\n"
+        f"{hist_texto}\n"
+        f"Contexto:\n{contexto}\n\n"
+        f"Pregunta: {consulta}\n\nRespuesta:"
+    )
+
+
+def rag_responder(consulta: str, historial: list) -> dict:
+    """
+    Punto de entrada del RAG. Busca en ChromaDB y genera con Gemini.
+    Devuelve {"respuesta": str, "restaurantes": list, "desde_cache": bool}.
+    """
+    clave = _rag_clave(consulta)
+
+    # ── Caché hit: coste cero ──────────────────────────────────────────────────
+    if clave in _cache_rag:
+        entrada = _cache_rag[clave]
+        return {
+            "respuesta":    entrada["respuesta"],
+            "restaurantes": entrada.get("restaurantes", []),
+            "desde_cache":  True,
+        }
+
+    # ── Retrieval semántico ────────────────────────────────────────────────────
+    docs = _rag_buscar_semantico(consulta)
+
+    if not docs:
+        return {
+            "respuesta": (
+                "No encontré restaurantes que encajen con tu búsqueda. "
+                "Prueba con un tipo de cocina o plato concreto."
+            ),
+            "restaurantes": [],
+            "desde_cache":  False,
+        }
+
+    # ── Generación con Gemini (o fallback sin API key) ─────────────────────────
+    if GEMINI_API_KEY:
+        prompt    = _rag_construir_prompt(consulta, docs, historial)
+        respuesta = _rag_gemini_call(prompt)
+    else:
+        respuesta = ""
+
+    if not respuesta:
+        nombres   = [d["metadata"].get("nombre", "—") for d in docs[:3]]
+        respuesta = (
+            "He encontrado estos restaurantes que pueden interesarte: "
+            + ", ".join(nombres) + ". "
+            "Para más detalle, prueba a ser más específico en tu búsqueda."
+        )
+
+    restaurantes_meta = [
+        {
+            "id_restaurante": d["metadata"].get("id_restaurante", ""),
+            "nombre":         d["metadata"].get("nombre", ""),
+            "cocina":         d["metadata"].get("cocina", ""),
+            "valoracion":     d["metadata"].get("valoracion", 0),
+            "similitud":      round(1 - d["distancia"], 3),
+        }
+        for d in docs
+    ]
+
+    # ── Guardar en caché ───────────────────────────────────────────────────────
+    _cache_rag[clave] = {"respuesta": respuesta, "restaurantes": restaurantes_meta}
+    _rag_guardar_cache()
+
+    return {"respuesta": respuesta, "restaurantes": restaurantes_meta, "desde_cache": False}
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGENTE LANGGRAPH
+# Grafo: interpretar → nlp_search → router → [sintetizar | rag_search → sintetizar]
+#
+# Router activa RAG cuando:
+#   · El NLP devuelve < 2 resultados con score relevante
+#   · La consulta no tiene ningún anclaje (cocina / zona / criterio)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Umbrales del router — ajusta según tu distribución de scores
+UMBRAL_SCORE_NLP  = 1.0   # score mínimo para considerar NLP suficiente
+MIN_RESULTS_NLP   = 2     # resultados mínimos para evitar RAG
+
+
+class EstadoAgente(TypedDict):
+    consulta:          str
+    historial:         list          # [{"role": "user"/"assistant", "content": str}]
+    restaurantes_nlp:  Optional[list]
+    meta_nlp:          Optional[dict]
+    score_nlp:         float
+    usar_rag:          bool
+    respuesta:         str
+    restaurantes:      list
+    proyecto:          str           # "nlp" | "rag" | "rag_cache"
+
+
+def _agente_nodo_interpretar(estado: EstadoAgente) -> dict:
+    """Inicializa el estado. Punto de extensión para preprocesado futuro."""
+    return {
+        "restaurantes_nlp": None,
+        "meta_nlp":         None,
+        "score_nlp":        0.0,
+        "usar_rag":         False,
+        "respuesta":        "",
+        "restaurantes":     [],
+        "proyecto":         "nlp",
+    }
+
+
+def _agente_nodo_nlp_search(estado: EstadoAgente) -> dict:
+    """Motor NLP determinista — gratuito, sin ninguna API."""
+    try:
+        restaurantes, meta = _buscar(estado["consulta"])
+        score_max = max((r.get("_score_final", 0) for r in restaurantes), default=0.0)
+    except Exception:
+        restaurantes, meta, score_max = [], {}, 0.0
+    return {"restaurantes_nlp": restaurantes, "meta_nlp": meta, "score_nlp": score_max}
+
+
+def _agente_nodo_router(estado: EstadoAgente) -> dict:
+    """Decide si los resultados NLP son suficientes o hay que tirar de RAG."""
+    nlp = estado.get("restaurantes_nlp") or []
+    meta  = estado.get("meta_nlp") or {}
+    score = estado.get("score_nlp", 0.0)
+
+    sin_ancla = (
+        not meta.get("cocina")
+        and not meta.get("zona")
+        and not meta.get("criterios")
+    )
+
+    usar_rag = (
+        len(nlp) < MIN_RESULTS_NLP
+        or score < UMBRAL_SCORE_NLP
+        or sin_ancla
+    )
+    return {"usar_rag": usar_rag}
+
+
+def _agente_nodo_rag(estado: EstadoAgente) -> dict:
+    """Búsqueda semántica + Gemini (solo cuando el router lo decide)."""
+    resultado = rag_responder(estado["consulta"], estado["historial"])
+    proyecto  = "rag_cache" if resultado.get("desde_cache") else "rag"
+    return {
+        "respuesta":    resultado["respuesta"],
+        "restaurantes": resultado["restaurantes"],
+        "proyecto":     proyecto,
+    }
+
+
+def _agente_nodo_sintetizar(estado: EstadoAgente) -> dict:
+    """Formatea la respuesta final. Si venimos del NLP, genera el texto (gratuito)."""
+    if not estado.get("usar_rag"):
+        restaurantes = estado.get("restaurantes_nlp") or []
+        meta         = estado.get("meta_nlp") or {}
+        # Limpiar campos internos antes de devolver al frontend
+        restaurantes_limpios = [
+            {k: v for k, v in r.items() if not k.startswith("_")}
+            for r in restaurantes
+        ]
+        return {
+            "respuesta":    _generar_respuesta(estado["consulta"], restaurantes, meta),
+            "restaurantes": restaurantes_limpios,
+            "proyecto":     "nlp",
+        }
+    # RAG: la respuesta ya viene del nodo anterior
+    return {}
+
+
+def _agente_decide_camino(estado: EstadoAgente) -> str:
+    return "rag" if estado.get("usar_rag") else "sintetizar"
+
+
+def _construir_grafo_agente():
+    """Compila el grafo LangGraph una sola vez al arrancar."""
+    try:
+        from langgraph.graph import StateGraph, END
+    except ImportError:
+        return None
+
+    g = StateGraph(EstadoAgente)
+    g.add_node("interpretar", _agente_nodo_interpretar)
+    g.add_node("nlp_search",  _agente_nodo_nlp_search)
+    g.add_node("router",      _agente_nodo_router)
+    g.add_node("rag_search",  _agente_nodo_rag)
+    g.add_node("sintetizar",  _agente_nodo_sintetizar)
+
+    g.set_entry_point("interpretar")
+    g.add_edge("interpretar", "nlp_search")
+    g.add_edge("nlp_search",  "router")
+    g.add_conditional_edges(
+        "router", _agente_decide_camino,
+        {"rag": "rag_search", "sintetizar": "sintetizar"},
+    )
+    g.add_edge("rag_search", "sintetizar")
+    g.add_edge("sintetizar", END)
+
+    return g.compile()
+
+
+# Instancia global del agente (None si LangGraph no está instalado)
+_agente_grafo = None
+
+
+def agente_consultar(consulta: str, historial: list | None = None) -> dict:
+    """
+    Punto de entrada principal del agente conversacional.
+    Si LangGraph no está disponible, cae directamente al NLP (sin errores).
+    """
+    global _agente_grafo
+
+    # Inicialización lazy del grafo
+    if _agente_grafo is None:
+        _agente_grafo = _construir_grafo_agente()
+
+    historial = historial or []
+
+    # ── Fallback sin LangGraph ────────────────────────────────────────────────
+    if _agente_grafo is None:
+        try:
+            restaurantes, meta = _buscar(consulta)
+            respuesta = _generar_respuesta(consulta, restaurantes, meta)
+            restaurantes_limpios = [
+                {k: v for k, v in r.items() if not k.startswith("_")}
+                for r in restaurantes
+            ]
+        except Exception:
+            respuesta = "No pude procesar tu consulta. Prueba con otros términos."
+            restaurantes_limpios = []
+        return {"respuesta": respuesta, "restaurantes": restaurantes_limpios, "proyecto": "nlp"}
+
+    # ── Agente LangGraph ──────────────────────────────────────────────────────
+    estado_inicial: EstadoAgente = {
+        "consulta":          consulta,
+        "historial":         historial,
+        "restaurantes_nlp":  None,
+        "meta_nlp":          None,
+        "score_nlp":         0.0,
+        "usar_rag":          False,
+        "respuesta":         "",
+        "restaurantes":      [],
+        "proyecto":          "nlp",
+    }
+
+    resultado = _agente_grafo.invoke(estado_inicial)
+    return {
+        "respuesta":    resultado.get("respuesta", ""),
+        "restaurantes": resultado.get("restaurantes", []),
+        "proyecto":     resultado.get("proyecto", "nlp"),
+    }
+
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
     _inicializar()
+    _rag_cargar_cache()
+    yield
+
+app.router.lifespan_context = lifespan
 
 
 @app.get("/")
 def root():
-    return {"status": "ok", "mensaje": "API Restaurantes Madrid — NLP local (nlptown)"}
+    rag_disponible = os.path.exists(CHROMA_DIR)
+    return {
+        "status":  "ok",
+        "mensaje": "API Restaurantes Madrid — NLP local + RAG + LangGraph",
+        "rag":     rag_disponible,
+    }
 
 
 @app.get("/health")
 def health():
     return {
-        "status": "ok",
+        "status":               "ok",
         "restaurantes_cargados": len(df_global) if df_global is not None else 0,
-        "backend": "nlptown + análisis NLP local",
+        "backend":              "nlptown + RAG + LangGraph",
+        "rag_disponible":       os.path.exists(CHROMA_DIR),
+        "cache_rag_entradas":   len(_cache_rag),
     }
 
 
@@ -1092,20 +1648,21 @@ def endpoint_recomendar(request: ConsultaRequest):
     if df_global is None:
         raise HTTPException(status_code=503, detail="Datos no cargados aún, espera un momento")
 
+    historial = [
+        {"role": m.role, "content": m.content}
+        for m in (request.historial or [])
+    ]
+
     try:
-        restaurantes, meta = _buscar(request.consulta)
-        respuesta = _generar_respuesta(request.consulta, restaurantes, meta)
-
-        # Limpiar campos internos antes de devolver
-        for r in restaurantes:
-            r.pop("_pct_positivo", None)
-            r.pop("_avg_estrellas", None)
-
+        resultado = agente_consultar(
+            consulta  = request.consulta,
+            historial = historial,
+        )
         return RecomendacionResponse(
-            respuesta=respuesta,
-            proyecto="nlptown/bert + análisis NLP local",
-            restaurantes=restaurantes,
-            consulta_usuario=request.consulta,
+            respuesta        = resultado["respuesta"],
+            proyecto         = resultado["proyecto"],
+            restaurantes     = resultado["restaurantes"],
+            consulta_usuario = request.consulta,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1132,3 +1689,41 @@ def listar_restaurantes():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/indexar")
+def endpoint_indexar():
+    """
+    Reconstruye la base vectorial ChromaDB.
+    Llamar solo cuando haya nuevas reseñas en resenas_unificadas.csv.
+    """
+    try:
+        rag_indexar(verbose=False)
+        global _chroma_collection
+        _chroma_collection = None   # forzar recarga en el próximo uso
+        return {"status": "ok", "mensaje": "Base vectorial reconstruida correctamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTRY POINT — python main.py --indexar
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    if "--indexar" in sys.argv:
+        print("Iniciando indexación RAG...")
+        # Cargar .env si existe
+        _env = os.path.join(BASE_DIR, ".env")
+        if os.path.exists(_env):
+            with open(_env) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+        rag_indexar(verbose=True)
+    else:
+        import uvicorn
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
