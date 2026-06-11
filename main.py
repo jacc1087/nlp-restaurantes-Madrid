@@ -1070,10 +1070,12 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         restaurantes.append(_fila_a_restaurante(row, distancia_km=dist_km))
 
     meta = {
-        "cocina": cocina,
-        "zona": zona_coords,
-        "criterios": criterios,
-        "n_total": len(df_filtrado),
+        "cocina":       cocina,
+        "zona":         zona_coords,
+        "criterios":    criterios,
+        "n_total":      len(df_filtrado),
+        "tokens_plato": tokens_plato,   # para el texto de intro
+        "hay_plato":    hay_plato,
     }
     return restaurantes, meta
 
@@ -1120,10 +1122,20 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
         }
         intro_parts.append(", ".join(etiquetas.get(c, c) for c in criterios))
 
-    if intro_parts:
+    tokens_plato = meta.get("tokens_plato", [])
+    hay_plato    = meta.get("hay_plato", False)
+
+    if intro_parts and zona and hay_plato:
+        # Ej: "restaurantes con croquetas cerca de Malasaña"
+        plato_str = tokens_plato[0] if tokens_plato else ""
+        intro = f"Aquí tienes restaurantes con {plato_str} cerca de esa zona, ordenados por distancia:"
+    elif intro_parts:
         intro = f"Aquí tienes mis recomendaciones de restaurantes con {' y '.join(intro_parts)}:"
+    elif zona and hay_plato:
+        plato_str = tokens_plato[0] if tokens_plato else "ese plato"
+        intro = f"Aquí tienes restaurantes con {plato_str} cerca de esa zona, ordenados por distancia:"
     elif zona:
-        intro = "Aquí tienes los restaurantes mejor valorados cerca de esa zona:"
+        intro = "Aquí tienes los restaurantes más cercanos a esa zona:"
     else:
         intro = f"Aquí tienes mis recomendaciones para «{consulta}»:"
 
