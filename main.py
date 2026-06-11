@@ -434,24 +434,46 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
-    "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
-    "italiano": "italiana", "italia": "italiana",
-    "japones": "japonesa", "japon": "japonesa",
-    "indio": "india", "hindu": "india", "india": "india",
-    "peruano": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española",
-    "asturiano": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "galicia": "gallega",
-    "vasco": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
-    "frances": "francesa", "francia": "francesa",
-    "griego": "griega", "grecia": "griega",
-    "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
-    "venezolano": "venezolana", "venezuela": "venezolana",
-    "colombiano": "colombiana", "colombia": "colombiana",
-    "chino": "china",
-    "tailandes": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
-    "americano": "americana", "usa": "americana",
-    "mediterraneo": "mediterranea",
+    "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
+    "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa", "sushi": "japonesa",
+    "indio": "india", "india": "india", "hindu": "india",
+    "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
+    "espanol": "española", "espanola": "española", "espana": "española",
+    "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
+    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
+    "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
+    "frances": "francesa", "francesa": "francesa", "francia": "francesa",
+    "griego": "griega", "griega": "griega", "grecia": "griega",
+    "arabe": "arabe", "libanes": "arabe", "libano": "arabe", "marroqui": "arabe",
+    "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
+    "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
+    "chino": "china", "china": "china",
+    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
+    "americano": "americana", "americana": "americana", "usa": "americana",
+    "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+}
+
+FRASES_COCINA = {
+    "cocina gallega": "gallega", "comida gallega": "gallega",
+    "restaurante gallego": "gallega", "gastronomia gallega": "gallega",
+    "cocina vasca": "vasca", "comida vasca": "vasca",
+    "restaurante vasco": "vasca", "gastronomia vasca": "vasca",
+    "cocina italiana": "italiana", "comida italiana": "italiana",
+    "restaurante italiano": "italiana",
+    "cocina japonesa": "japonesa", "comida japonesa": "japonesa",
+    "restaurante japones": "japonesa",
+    "cocina mexicana": "mexicana", "comida mexicana": "mexicana",
+    "restaurante mexicano": "mexicana",
+    "cocina peruana": "peruana", "comida peruana": "peruana",
+    "restaurante peruano": "peruana",
+    "cocina francesa": "francesa", "comida francesa": "francesa",
+    "cocina china": "china", "comida china": "china",
+    "cocina india": "india", "comida india": "india",
+    "cocina americana": "americana", "comida americana": "americana",
+    "cocina griega": "griega", "comida griega": "griega",
+    "cocina arabe": "arabe", "comida arabe": "arabe",
+    "cocina asturiana": "asturiana", "comida asturiana": "asturiana",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -475,15 +497,29 @@ INTENCIONES_CRITERIO = {
 
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
-    # Buscar sinónimos como palabras completas
-    for sinonimo, cocina in SINONIMOS_COCINA.items():
-        padded = " " + c + " "
-        if (f" {sinonimo} " in padded or c == sinonimo
-                or c.startswith(sinonimo + " ") or c.endswith(" " + sinonimo)):
+
+    # 1. Frases completas primero
+    for frase, cocina in FRASES_COCINA.items():
+        if frase in c:
             return cocina
+
+    # 2. Tokens individuales
+    padded = " " + c + " "
+    for sinonimo, cocina in SINONIMOS_COCINA.items():
+        if (f" {sinonimo} " in padded
+                or c == sinonimo
+                or c.startswith(sinonimo + " ")
+                or c.endswith(" " + sinonimo)):
+            return cocina
+
+    # 3. Prefijos para plurales y derivados
+    tokens = c.split()
+    for token in tokens:
+        for sinonimo, cocina in SINONIMOS_COCINA.items():
+            if len(sinonimo) >= 5 and token.startswith(sinonimo):
+                return cocina
+
     return None
-
-
 def _detectar_criterios(consulta: str) -> list:
     """Detecta criterios implícitos en la consulta (niños, terraza, etc.)."""
     c = _norm(consulta)
