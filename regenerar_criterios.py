@@ -69,42 +69,52 @@ def tiene_negacion(texto, keyword, ventana=25):
     contexto = texto[max(0, idx-ventana):idx]
     return any(neg in contexto for neg in NEGACIONES)
 
-def extraer_oracion(texto_original: str, keyword_norm: str, max_chars: int = 180) -> str:
+def partir_en_segmentos(texto):
     """
-    Extrae la oración del texto ORIGINAL que contiene la keyword.
-    Valida que la keyword realmente esté en el fragmento devuelto.
-    Si no puede garantizarlo, devuelve "".
+    Divide el texto en segmentos usando:
+      - Punto, exclamación, interrogación, salto de línea
+      - Coma seguida de conector frecuente
+    Devuelve lista de (inicio, fin) sobre el texto original.
+    """
+    patron = re.compile(
+        r'[.!?\n]+|,\s*(?=y |pero |aunque |además |también |sin embargo |eso sí |eso si )',
+        re.IGNORECASE
+    )
+    cortes = [0]
+    for m in patron.finditer(texto):
+        cortes.append(m.end())
+    cortes.append(len(texto))
+    segmentos = []
+    for i in range(len(cortes) - 1):
+        ini, fin = cortes[i], cortes[i+1]
+        if texto[ini:fin].strip():
+            segmentos.append((ini, fin))
+    return segmentos
+
+
+def extraer_oracion(texto_original, keyword_norm, max_chars=160):
+    """
+    A prueba de reseñas sin puntuación:
+    1. Parte el texto en segmentos pequeños
+    2. Busca el segmento que contiene la keyword
+    3. Si es <= max_chars → devuelve limpio
+    4. Si es mayor → DESCARTA. Nunca trunca, nunca muestra texto incompleto.
     """
     texto_n = norm(texto_original)
-    idx = texto_n.find(keyword_norm)
-    if idx == -1:
+    idx_n   = texto_n.find(keyword_norm)
+    if idx_n == -1:
         return ""
 
-    # Buscar inicio de oración mirando hacia atrás
-    inicio = max(0, idx - 300)
-    segmento_antes = texto_original[inicio:idx]
-    m = list(re.finditer(r'[.!?\n]\s*', segmento_antes))
-    inicio_oracion = inicio + m[-1].end() if m else inicio
+    for ini, fin in partir_en_segmentos(texto_original):
+        if ini <= idx_n < fin:
+            fragmento = texto_original[ini:fin].strip()
+            if keyword_norm not in norm(fragmento):
+                continue
+            if len(fragmento) > max_chars:
+                return ""   # demasiado largo → descartar
+            return limpiar_frase(fragmento)
 
-    # Buscar fin de oración mirando hacia delante
-    segmento_despues = texto_original[idx:]
-    m2 = re.search(r'[.!?\n]', segmento_despues)
-    fin_oracion = idx + m2.end() if m2 else min(idx + 250, len(texto_original))
-
-    oracion = texto_original[inicio_oracion:fin_oracion].strip()
-
-    # ── VALIDACIÓN CLAVE: la keyword tiene que estar en la oración extraída ──
-    if keyword_norm not in norm(oracion):
-        # Fallback: tomar ventana directa centrada en la keyword
-        oracion = texto_original[max(0, idx-80):min(len(texto_original), idx+120)].strip()
-        if keyword_norm not in norm(oracion):
-            return ""  # No se puede garantizar relevancia → descartar
-
-    # Truncar sin cortar palabra
-    if len(oracion) > max_chars:
-        oracion = oracion[:max_chars].rsplit(' ', 1)[0] + "…"
-
-    return limpiar_frase(oracion)
+    return ""
 
 def calcular_criterios(resenas_texto):
     resultado = {c: False for c in CRITERIOS}
