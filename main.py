@@ -938,6 +938,16 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
 # BÚSQUEDA PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
+STOPWORDS_BUSQUEDA = {
+    "quiero", "busco", "algo", "cerca", "de", "en", "por", "para", "con",
+    "un", "una", "unos", "unas", "los", "las", "el", "la", "que", "hay",
+    "donde", "puedo", "comer", "tomar", "ver", "ir", "dame", "dime",
+    "mucho", "muy", "bien", "buen", "buena", "buenos", "buenas",
+    "necesito", "pon", "recomienda",
+    "restaurante", "restaurantes", "sitio", "sitios", "lugar", "lugares",
+}
+
+
 def _buscar(consulta: str) -> tuple[list, dict]:
     """
     Motor de búsqueda principal. Devuelve (restaurantes_ordenados, meta).
@@ -962,7 +972,10 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         for zona_key in ZONAS_MADRID:
             if _norm(zona_key) in _norm(consulta):
                 tokens_zona.update(_norm(zona_key).split())
-    tokens_plato = [t for t in tokens if t not in tokens_zona]
+    tokens_plato = [
+        t for t in tokens
+        if t not in tokens_zona and t not in STOPWORDS_BUSQUEDA and len(t) >= 4
+    ]
 
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
