@@ -373,7 +373,8 @@ COCINAS = {
     # Española clásica
     "española":    ["paella", "cocido madrileno", "fabada", "gazpacho", "salmorejo",
                     "patatas bravas", "croquetas jamon", "tortilla española", "pisto manchego",
-                    "rabo de toro", "chuleton", "callos madrilenos", "oreja"],
+                    "rabo de toro", "chuleton", "chuletón", "callos madrilenos", "oreja",
+                    "cocido", "callos", "morcilla", "lechazo", "cordero asado"],
 
     # Asturiana: platos muy específicos
     "asturiana":   ["cachopo", "fabada asturiana", "oricios", "pote asturiano",
@@ -442,7 +443,7 @@ SINONIMOS_COCINA = {
     "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa", "sushi": "japonesa",
     "indio": "india", "india": "india", "hindu": "india",
     "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española", "espana": "española",
+    "espanol": "española", "espanola": "española", "espana": "española", "asador": "española", "asadores": "española", "castellano": "española", "castellana": "española", "taberna": "española", "meson": "española", "mesón": "española",
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
     "gallego": "gallega", "gallega": "gallega", "galicia": "gallega", "galego": "gallega", "galega": "gallega", "galeg": "gallega",
     "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
@@ -620,7 +621,8 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                         "chicken wings", "brisket", "coleslaw", "corn dog"],
         "española":    ["cocido madrileno", "fabada", "pisto manchego", "croquetas jamon",
                         "tortilla española", "rabo de toro", "callos madrilenos", "oreja",
-                        "patatas bravas", "gazpacho", "salmorejo"],
+                        "patatas bravas", "gazpacho", "salmorejo", "chuleton", "chuletón",
+                        "cocido", "callos", "morcilla", "lechazo", "cordero asado"],
         "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
                          "couscous marroqui", "tajine", "merguez", "harira"],
     }
@@ -633,7 +635,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "japonesa":   ["sushi", "tempura", "gyozas"],
         "peruana":    ["ceviche"],
         "mexicana":   ["tacos", "guacamole", "nachos"],
-        "española":   ["paella", "chuleton", "jamón", "chorizo"],
+        "española":   ["paella", "jamón", "chorizo"],
         "francesa":   ["ratatouille", "tartare", "foie", "crepe"],
         "arabe":      ["hummus", "kebab"],
         "venezolana": ["pabellon", "chicha"],
