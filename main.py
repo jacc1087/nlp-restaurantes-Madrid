@@ -942,6 +942,15 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "aviso_espera_larga":           float(row.get("velocidad_neg", 0) or 0) > 4,
         "aviso_precio_elevado":         float(row.get("precio_neg", 0) or 0) > 4,
         "aviso_servicio_mejorable":     float(row.get("servicio_neg", 0) or 0) > 6,
+        # Frases de reseñas que justifican cada criterio
+        "frases_criterios": {
+            k: str(row.get(f"criterio_{k}_frases", "") or "")
+            for k in ["ninos", "mascotas", "terraza", "vistas", "musica_directo",
+                      "romantico", "buen_postre", "precio_calidad",
+                      "grupos_grandes", "vegano_vegetariano", "sin_gluten"]
+            if str(row.get(f"criterio_{k}_frases", "") or "").strip()
+        },
+        "servicio_frases": str(row.get("servicio_frases", "") or ""),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
