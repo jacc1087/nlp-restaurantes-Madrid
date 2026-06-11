@@ -1038,13 +1038,13 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
         df_filtrado = df_con_match
 
-    # ── Filtrar hard por plato cuando hay zona — mismo principio que cocina ──
-    # Si el usuario buscó "croquetas en Malasaña", solo salen restaurantes
-    # que mencionan croquetas en sus reseñas (score_match > 0).
-    # Sin esto, la distancia puede colar restaurantes sin el plato pedido.
+    # ── Filtrar hard por plato cuando hay zona ───────────────────────────────
+    # Umbral >= 2.5 para asegurar que el plato aparece como tal en reseñas
+    # (score 2.0 = mínimo por substring en tfidf, no es plato real)
+    UMBRAL_PLATO = 2.5
     if zona_coords and hay_plato:
-        df_con_plato = df_filtrado[df_filtrado["_score_match"] > 0]
-        if len(df_con_plato) >= 2:  # solo filtrar si hay suficientes resultados
+        df_con_plato = df_filtrado[df_filtrado["_score_match"] >= UMBRAL_PLATO]
+        if len(df_con_plato) >= 2:
             df_filtrado = df_con_plato
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
