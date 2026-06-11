@@ -1016,10 +1016,20 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         if t not in tokens_zona and t not in STOPWORDS_BUSQUEDA and len(t) >= 4
     ]
     # Validar que cada token candidato es un plato real en el CSV
-    # (score >= 2.5 en al menos 1 restaurante) — descarta zonas mal escritas y ruido
+    # Si hay cocina detectada, aceptar también tokens que sean platos propios de esa cocina
+    # (evita que "chuleton" falle cuando "asador" ya detectó cocina española)
+    def _es_plato_valido(t, cocina_detectada):
+        if df.apply(lambda r: _score_texto(r, [t]), axis=1).max() >= 2.5:
+            return True
+        if cocina_detectada:
+            platos_cocina = [_norm(p) for p in COCINAS.get(cocina_detectada, [])]
+            if any(t in p or p in t for p in platos_cocina if len(p) >= 4):
+                return True
+        return False
+
     tokens_plato = [
         t for t in tokens_plato_candidatos
-        if df.apply(lambda r: _score_texto(r, [t]), axis=1).max() >= 2.5
+        if _es_plato_valido(t, cocina)
     ]
 
     # Calcular score base de calidad para todos
@@ -1105,14 +1115,31 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
         df_filtrado = df_con_match
 
-    # ── Filtrar hard por plato cuando hay zona ───────────────────────────────
+    # ── Filtrar hard por plato (siempre que haya plato detectado) ──────────────
     # Umbral >= 2.5 para asegurar que el plato aparece como tal en reseñas
-    # (score 2.0 = mínimo por substring en tfidf, no es plato real)
+    # Aplica tanto con zona como sin ella: "asador con chuletón" → solo asadores con chuletón
     UMBRAL_PLATO = 2.5
-    if zona_coords and hay_plato:
-        df_con_plato = df_filtrado[df_filtrado["_score_match"] >= UMBRAL_PLATO]
+    if hay_plato:
+        # Cuando hay cocina Y plato: recalcular score_match solo por plato (no por cocina)
+        # para que el filtro sea sobre el plato concreto, no sobre la cocina
+        if cocina:
+            df_filtrado["_score_plato"] = df_filtrado.apply(
+                lambda r: _score_texto(r, tokens_plato), axis=1
+            )
+            df_con_plato = df_filtrado[df_filtrado["_score_plato"] >= UMBRAL_PLATO]
+        else:
+            df_con_plato = df_filtrado[df_filtrado["_score_match"] >= UMBRAL_PLATO]
         if len(df_con_plato) >= 2:
             df_filtrado = df_con_plato
+        elif len(df_con_plato) == 1:
+            df_filtrado = df_con_plato  # aunque sea 1, es correcto
+        # Si 0 resultados con el plato → devolver vacío con mensaje claro
+        elif len(df_con_plato) == 0:
+            return [], {
+                "cocina": cocina, "zona": zona_coords, "criterios": criterios,
+                "n_total": 0, "tokens_plato": tokens_plato, "hay_plato": True,
+                "sin_resultados_plato": True,
+            }
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
     n_resultados = 6 if (cocina or tokens or criterios) else 8
