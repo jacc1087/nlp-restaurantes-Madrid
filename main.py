@@ -1125,15 +1125,10 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     tokens_plato = meta.get("tokens_plato", [])
     hay_plato    = meta.get("hay_plato", False)
 
-    if intro_parts and zona and hay_plato:
-        # Ej: "restaurantes con croquetas cerca de Malasaña"
-        plato_str = tokens_plato[0] if tokens_plato else ""
-        intro = f"Aquí tienes restaurantes con {plato_str} cerca de esa zona, ordenados por distancia:"
-    elif intro_parts:
+    if intro_parts:
         intro = f"Aquí tienes mis recomendaciones de restaurantes con {' y '.join(intro_parts)}:"
     elif zona and hay_plato:
-        plato_str = tokens_plato[0] if tokens_plato else "ese plato"
-        intro = f"Aquí tienes restaurantes con {plato_str} cerca de esa zona, ordenados por distancia:"
+        intro = "Aquí tienes los restaurantes más cercanos a esa zona que encajan con tu búsqueda:"
     elif zona:
         intro = "Aquí tienes los restaurantes más cercanos a esa zona:"
     else:
