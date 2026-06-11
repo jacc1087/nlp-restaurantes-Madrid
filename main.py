@@ -262,7 +262,7 @@ ZONAS_MADRID = {
     "alonso martinez": (40.4265, -3.6935), "alonso martínez": (40.4265, -3.6935),
     "colon": (40.4238, -3.6888), "colón": (40.4238, -3.6888),
     "recoletos": (40.4238, -3.6898),
-    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844),
+    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844), "el retiro": (40.4153, -3.6844),
     "salamanca": (40.4298, -3.6831), "serrano": (40.4298, -3.6831),
     "goya": (40.4248, -3.6788), "jorge juan": (40.4248, -3.6748),
     "chamberi": (40.4350, -3.7000), "chamberí": (40.4350, -3.7000),
@@ -972,9 +972,15 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         for zona_key in ZONAS_MADRID:
             if _norm(zona_key) in _norm(consulta):
                 tokens_zona.update(_norm(zona_key).split())
-    tokens_plato = [
+    tokens_plato_candidatos = [
         t for t in tokens
         if t not in tokens_zona and t not in STOPWORDS_BUSQUEDA and len(t) >= 4
+    ]
+    # Validar que cada token candidato es un plato real en el CSV
+    # (score >= 2.5 en al menos 1 restaurante) — descarta zonas mal escritas y ruido
+    tokens_plato = [
+        t for t in tokens_plato_candidatos
+        if df.apply(lambda r: _score_texto(r, [t]), axis=1).max() >= 2.5
     ]
 
     # Calcular score base de calidad para todos
@@ -1178,16 +1184,7 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     tokens_plato = meta.get("tokens_plato", [])
     hay_plato    = meta.get("hay_plato", False)
 
-    if intro_parts:
-        intro = f"Aquí tienes mis recomendaciones de restaurantes con {' y '.join(intro_parts)}:"
-    elif zona and hay_plato:
-        intro = "Aquí tienes los restaurantes más cercanos a esa zona que encajan con tu búsqueda:"
-    elif zona:
-        intro = "Aquí tienes los restaurantes más cercanos a esa zona:"
-    else:
-        intro = f"Aquí tienes mis recomendaciones para «{consulta}»:"
-
-    lineas = [intro, ""]
+    lineas = [""]
 
     for r in restaurantes:
         nombre  = r["nombre"]
