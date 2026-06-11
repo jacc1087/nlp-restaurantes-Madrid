@@ -1,12 +1,17 @@
 """
 regenerar_criterios.py
 ──────────────────────
-Calcula criterios directamente desde las reseñas sin Gemini.
+Calcula criterios directamente desde las reseñas sin Gemini ni APIs externas.
 Rápido, sin coste, sin bloqueos.
+
+Mejoras v3:
+  - Fragmentos extraídos del texto ORIGINAL (no del normalizado)
+  - Fragmento centrado en la oración que contiene la keyword
+  - limpiar_frase(): capitaliza y añade punto final (sin API)
 
 Uso: python3.11 regenerar_criterios.py
 """
-import os, unicodedata, pandas as pd
+import os, re, unicodedata, pandas as pd
 from collections import defaultdict
 
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
@@ -17,6 +22,16 @@ def norm(s):
     s = str(s).lower()
     s = unicodedata.normalize("NFD", s)
     return "".join(c for c in s if unicodedata.category(c) != "Mn")
+
+def limpiar_frase(texto: str) -> str:
+    """Capitaliza primera letra y añade punto final si falta. Sin API."""
+    texto = texto.strip()
+    if not texto:
+        return texto
+    texto = texto[0].upper() + texto[1:]
+    if texto[-1] not in ".!?…":
+        texto += "."
+    return texto
 
 NEGACIONES = {"no ","sin ","nunca ","tampoco ","ni ","jamas ","nada ","apenas "}
 
@@ -34,7 +49,6 @@ CRITERIOS = {
     "sin_gluten":         ["sin gluten","celiaco","celiaca","celíaco","celíaca","gluten free","intolerancia al gluten"],
 }
 
-# Mínimo de reseñas con señal positiva para marcar como True
 MIN_MENCIONES = {
     "ninos": 2, "mascotas": 1, "terraza": 2, "vistas": 1,
     "musica_directo": 1, "romantico": 2, "buen_postre": 3,
@@ -48,22 +62,51 @@ def tiene_negacion(texto, keyword, ventana=25):
     contexto = texto[max(0, idx-ventana):idx]
     return any(neg in contexto for neg in NEGACIONES)
 
+def extraer_oracion(texto_original: str, keyword_norm: str, max_chars: int = 160) -> str:
+    """
+    Busca la keyword (normalizada) en el texto normalizado,
+    pero devuelve la oración completa del texto ORIGINAL.
+    """
+    texto_n = norm(texto_original)
+    idx = texto_n.find(keyword_norm)
+    if idx == -1:
+        return ""
+
+    # Buscar inicio de oración
+    inicio = max(0, idx - 200)
+    segmento_antes = texto_original[inicio:idx]
+    m = list(re.finditer(r'[.!?]\s+', segmento_antes))
+    inicio_oracion = inicio + m[-1].end() if m else inicio
+
+    # Buscar fin de oración
+    segmento_despues = texto_original[idx:]
+    m2 = re.search(r'[.!?]', segmento_despues)
+    fin_oracion = idx + m2.end() if m2 else min(idx + 200, len(texto_original))
+
+    oracion = texto_original[inicio_oracion:fin_oracion].strip()
+
+    # Truncar sin cortar a mitad de palabra
+    if len(oracion) > max_chars:
+        oracion = oracion[:max_chars].rsplit(' ', 1)[0] + "…"
+
+    return limpiar_frase(oracion)
+
 def calcular_criterios(resenas_texto):
     resultado = {c: False for c in CRITERIOS}
     frases    = {c: [] for c in CRITERIOS}
     conteos   = defaultdict(int)
 
     for texto_original in resenas_texto:
-        texto = norm(str(texto_original))
+        texto_n = norm(str(texto_original))
         for criterio, keywords in CRITERIOS.items():
             for kw in keywords:
                 kw_n = norm(kw)
-                if kw_n in texto and not tiene_negacion(texto, kw_n):
+                if kw_n in texto_n and not tiene_negacion(texto_n, kw_n):
                     conteos[criterio] += 1
                     if len(frases[criterio]) < 2:
-                        idx = texto.find(kw_n)
-                        frag = texto[max(0,idx-50):idx+80].strip()
-                        frases[criterio].append(frag)
+                        oracion = extraer_oracion(str(texto_original), kw_n)
+                        if oracion:
+                            frases[criterio].append(oracion)
                     break
 
     for criterio in CRITERIOS:
@@ -82,14 +125,10 @@ col_rev = next(c for c in resenas.columns if c.lower() in ("review","texto","res
 resenas[col_id] = resenas[col_id].astype(int).astype(str)
 df["id_restaurante"] = df["id_restaurante"].astype(int).astype(str)
 
-# ── FIX: pre-inicializar columnas con dtype correcto antes del loop ────────────
-# Las booleanas como False (bool), las de frases como "" (object/string).
-# Sin esto, pandas infiere float64 en la primera asignación y luego explota
-# al intentar meter texto.
+# Pre-inicializar columnas con dtype correcto (evita TypeError float64 → string)
 for criterio in CRITERIOS:
-    df[f"criterio_{criterio}"]        = False          # dtype bool
-    df[f"criterio_{criterio}_frases"] = ""             # dtype object (string)
-# ──────────────────────────────────────────────────────────────────────────────
+    df[f"criterio_{criterio}"]        = False
+    df[f"criterio_{criterio}_frases"] = ""
 
 print(f"  {len(df)} restaurantes | {len(resenas)} reseñas\n")
 
