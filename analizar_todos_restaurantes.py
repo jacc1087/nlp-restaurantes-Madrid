@@ -633,7 +633,11 @@ def clasificar_criterios_gemini(rid: int, nombre: str, serie_reviews) -> dict:
                 frags_ok = [f for f in frags
                             if not any(_fragmento_tiene_negacion(f, kw) for kw in keywords)]
                 if frags_ok:
-                    frases_cache[criterio] = ' | '.join(frags_ok[:2])
+                    if _GEMINI_KEY:
+                        desc = CRITERIOS_DESC.get(criterio, criterio)
+                        frases_cache[criterio] = _parafrasear_frases(frags_ok[:2], desc)
+                    else:
+                        frases_cache[criterio] = ' | '.join(frags_ok[:2])
         return cached, frases_cache
 
     # Resultado por defecto
@@ -693,10 +697,78 @@ def clasificar_criterios_gemini(rid: int, nombre: str, serie_reviews) -> dict:
     frases = {}
     for criterio, frags in fragmentos_por_criterio.items():
         if resultado.get(criterio):
-            frases[criterio] = ' | '.join(frags[:2])
+            if _GEMINI_KEY:
+                desc = CRITERIOS_DESC.get(criterio, criterio)
+                frases[criterio] = _parafrasear_frases(frags[:2], desc)
+            else:
+                frases[criterio] = ' | '.join(frags[:2])
 
     _cache_criterios[clave_cache] = resultado
     return resultado, frases
+
+
+def _gemini_texto(prompt: str, max_tokens: int = 150) -> str:
+    """Llamada a Gemini para texto libre (no JSON). Ahorra tokens con prompts compactos."""
+    if not _GEMINI_KEY:
+        return ""
+    data = _json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens},
+    }).encode()
+    url = f"https://generativelanguage.googleapis.com/v1/models/{_GEMINI_MODEL}:generateContent?key={_GEMINI_KEY}"
+    texto = _gemini_call(url, data)
+    _time.sleep(0.3)
+    return texto.strip()
+
+
+def _parafrasear_frases(fragmentos: list[str], contexto: str = "") -> str:
+    """
+    Recibe fragmentos literales de reseñas y devuelve 1-2 frases parafraseadas
+    en lenguaje natural limpio, sin identificar a nadie ni reproducir texto literal.
+    Coste: ~80 tokens input + 60 output por llamada.
+    """
+    if not fragmentos or not _GEMINI_KEY:
+        return ""
+    # Truncar fragmentos para minimizar tokens
+    frags_txt = " | ".join(f[:120] for f in fragmentos[:3])
+    prompt = (
+        f"Reescribe en 1-2 frases naturales y limpias lo que expresan estas opiniones "
+        f"de clientes sobre {contexto}. Sin comillas, sin nombres propios, "
+        f"sin reproducir el texto original. Solo la idea principal.\n"
+        f"Opiniones: {frags_txt}\nFrases:"
+    )
+    return _gemini_texto(prompt, max_tokens=80)
+
+
+def _generar_resenas_destacadas(df_reviews, nombre_restaurante: str) -> str:
+    """
+    Selecciona las 3 reseñas más positivas (5 estrellas, más largas) y
+    las parafrasea con Gemini en frases limpias separadas por ' | '.
+    Privacidad: no se guarda ni reproduce ningún texto literal.
+    """
+    if not _GEMINI_KEY or df_reviews is None or len(df_reviews) == 0:
+        return ""
+
+    # Seleccionar reseñas positivas largas
+    col_stars = 'estrellas' if 'estrellas' in df_reviews.columns else 'Valoracion'
+    df_pos = df_reviews[df_reviews[col_stars] >= 4].copy()
+    df_pos['len'] = df_pos['Review'].astype(str).apply(len)
+    df_pos = df_pos.sort_values(['len'], ascending=False).head(5)
+
+    if len(df_pos) == 0:
+        return ""
+
+    fragmentos = df_pos['Review'].astype(str).tolist()[:3]
+    frags_txt = " | ".join(f[:150] for f in fragmentos)
+
+    prompt = (
+        f"Resume en 3 frases cortas y naturales las mejores opiniones de clientes "
+        f"sobre el restaurante {nombre_restaurante}. Cada frase separada por ' | '. "
+        f"Sin comillas, sin nombres propios, sin reproducir texto literal. "
+        f"Solo los aspectos más destacados.\n"
+        f"Opiniones: {frags_txt}\nResumen:"
+    )
+    return _gemini_texto(prompt, max_tokens=120)
 
 
 def filtrar_platos_con_gemini(candidatos: list, nombre_restaurante: str = "") -> list:
@@ -1200,7 +1272,13 @@ def analizar_restaurante(df_r):
     frags_serv_pos = [f for f in frags_serv
                       if not any(_fragmento_tiene_negacion(f, kw) for kw in kws_servicio)]
     if frags_serv_pos:
-        servicio_frases = ' | '.join(frags_serv_pos[:3])
+        if _GEMINI_KEY:
+            servicio_frases = _parafrasear_frases(frags_serv_pos[:3], f"el servicio de {nombre}")
+        else:
+            servicio_frases = ' | '.join(frags_serv_pos[:3])
+
+    # Reseñas destacadas — parafraseadas por Gemini (privacidad + calidad)
+    resenas_destacadas = _generar_resenas_destacadas(df_r, nombre)
 
     # TF-IDF
     textos_limpios = df_r['Review'].apply(limpiar).tolist()
@@ -1243,6 +1321,7 @@ def analizar_restaurante(df_r):
         **{f'criterio_{c}_frases': criterios_frases.get(c,'') for c in CRITERIOS_SIGNAL},
         # Frases de servicio destacado
         'servicio_frases':      servicio_frases,
+        'resenas_destacadas':   resenas_destacadas,
         'top5_platos':          platos_str,
         'todos_platos':         todos_str,
         'personal_destacado':   personal_str,

@@ -1,34 +1,44 @@
 """
 main.py — Backend FastAPI para el sistema de recomendación de restaurantes de Madrid.
-Lógica de búsqueda del Proyecto B (nlptown/bert + análisis NLP local).
-Interfaz compatible con el frontend React del Proyecto A.
+
+Arquitectura:
+  · Motor NLP determinista (nlptown/bert + análisis local) → gratuito, sin API
+  · RAG semántico (ChromaDB + Gemini embeddings) → fallback cuando NLP no ancla
+  · Agente LangGraph → coordina ambos caminos y mantiene historial de conversación
+  · Gemini Flash → solo se invoca cuando el NLP falla (≈ 0.009 €/consulta RAG)
 
 Modos de uso:
-  uvicorn main:app --reload        → servidor de desarrollo
-  uvicorn main:app --host 0.0.0.0  → producción (Railway)
+  uvicorn main:app --reload              → servidor de desarrollo
+  uvicorn main:app --host 0.0.0.0        → producción (Railway)
+
+Primera ejecución (indexar base vectorial):
+  python main.py --indexar
 
 Archivos necesarios en el mismo directorio:
-  analisis_restaurantes.csv        → generado por analizar_todos_restaurantes.py
-  ranking.csv                      → ranking original con Valoracion, Votaciones, Dirección
-  .cache_coords.json               → caché de coordenadas (generado por generar_agente.py)
+  analisis_restaurantes.csv   → generado por analizar_todos_restaurantes.py
+  resenas_unificadas.csv      → reseñas originales (para indexar en ChromaDB)
+  ranking.csv                 → ranking con Valoracion, Votaciones, Dirección
+  .cache_coords.json          → caché de coordenadas
 
-Variables de entorno opcionales:
-  GEMINI_API_KEY                   → no se usa en runtime, solo por compatibilidad
+Variables de entorno:
+  GEMINI_API_KEY              → para el fallback RAG (no obligatorio)
 """
 
 import os
 import re
+import sys
 import json
 import math
+import time
 import unicodedata
 import ast
-from typing import List, Optional
+import urllib.request as _ureq
+from typing import List, Optional, TypedDict
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -201,7 +211,10 @@ def _cargar_dataframe() -> pd.DataFrame:
 
     # Parsear columnas de criterios booleanos (pueden venir como string "True"/"False")
     for col in ["criterio_ninos", "criterio_mascotas", "criterio_terraza",
-                "criterio_vistas", "criterio_musica_directo", "criterio_romantico"]:
+                "criterio_vistas", "criterio_musica_directo", "criterio_romantico",
+                   "criterio_buen_postre", "criterio_precio_calidad",
+                   "criterio_grupos_grandes", "criterio_vegano_vegetariano",
+                   "criterio_sin_gluten"]:
         if col in df.columns:
             df[col] = df[col].apply(lambda v: str(v).strip().lower() == "true" if not isinstance(v, bool) else v)
         else:
@@ -252,7 +265,7 @@ ZONAS_MADRID = {
     "alonso martinez": (40.4265, -3.6935), "alonso martínez": (40.4265, -3.6935),
     "colon": (40.4238, -3.6888), "colón": (40.4238, -3.6888),
     "recoletos": (40.4238, -3.6898),
-    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844),
+    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844), "el retiro": (40.4153, -3.6844),
     "salamanca": (40.4298, -3.6831), "serrano": (40.4298, -3.6831),
     "goya": (40.4248, -3.6788), "jorge juan": (40.4248, -3.6748),
     "chamberi": (40.4350, -3.7000), "chamberí": (40.4350, -3.7000),
@@ -424,24 +437,46 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
-    "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
-    "italiano": "italiana", "italia": "italiana",
-    "japones": "japonesa", "japon": "japonesa",
-    "indio": "india", "hindu": "india", "india": "india",
-    "peruano": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española",
-    "asturiano": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "galicia": "gallega",
-    "vasco": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
-    "frances": "francesa", "francia": "francesa",
-    "griego": "griega", "grecia": "griega",
-    "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
-    "venezolano": "venezolana", "venezuela": "venezolana",
-    "colombiano": "colombiana", "colombia": "colombiana",
-    "chino": "china",
-    "tailandes": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
-    "americano": "americana", "usa": "americana",
-    "mediterraneo": "mediterranea",
+    "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
+    "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa", "sushi": "japonesa",
+    "indio": "india", "india": "india", "hindu": "india",
+    "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
+    "espanol": "española", "espanola": "española", "espana": "española",
+    "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
+    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega", "galego": "gallega", "galega": "gallega", "galeg": "gallega",
+    "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
+    "frances": "francesa", "francesa": "francesa", "francia": "francesa",
+    "griego": "griega", "griega": "griega", "grecia": "griega",
+    "arabe": "arabe", "libanes": "arabe", "libano": "arabe", "marroqui": "arabe",
+    "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
+    "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
+    "chino": "china", "china": "china",
+    "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
+    "americano": "americana", "americana": "americana", "usa": "americana",
+    "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+}
+
+FRASES_COCINA = {
+    "cocina gallega": "gallega", "comida gallega": "gallega", "cocina galega": "gallega", "comida galega": "gallega",
+    "restaurante gallego": "gallega", "gastronomia gallega": "gallega",
+    "cocina vasca": "vasca", "comida vasca": "vasca",
+    "restaurante vasco": "vasca", "gastronomia vasca": "vasca",
+    "cocina italiana": "italiana", "comida italiana": "italiana",
+    "restaurante italiano": "italiana",
+    "cocina japonesa": "japonesa", "comida japonesa": "japonesa",
+    "restaurante japones": "japonesa",
+    "cocina mexicana": "mexicana", "comida mexicana": "mexicana",
+    "restaurante mexicano": "mexicana",
+    "cocina peruana": "peruana", "comida peruana": "peruana",
+    "restaurante peruano": "peruana",
+    "cocina francesa": "francesa", "comida francesa": "francesa",
+    "cocina china": "china", "comida china": "china",
+    "cocina india": "india", "comida india": "india",
+    "cocina americana": "americana", "comida americana": "americana",
+    "cocina griega": "griega", "comida griega": "griega",
+    "cocina arabe": "arabe", "comida arabe": "arabe",
+    "cocina asturiana": "asturiana", "comida asturiana": "asturiana",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -465,15 +500,29 @@ INTENCIONES_CRITERIO = {
 
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
-    # Buscar sinónimos como palabras completas
-    for sinonimo, cocina in SINONIMOS_COCINA.items():
-        padded = " " + c + " "
-        if (f" {sinonimo} " in padded or c == sinonimo
-                or c.startswith(sinonimo + " ") or c.endswith(" " + sinonimo)):
+
+    # 1. Frases completas primero
+    for frase, cocina in FRASES_COCINA.items():
+        if frase in c:
             return cocina
+
+    # 2. Tokens individuales
+    padded = " " + c + " "
+    for sinonimo, cocina in SINONIMOS_COCINA.items():
+        if (f" {sinonimo} " in padded
+                or c == sinonimo
+                or c.startswith(sinonimo + " ")
+                or c.endswith(" " + sinonimo)):
+            return cocina
+
+    # 3. Prefijos para plurales y derivados
+    tokens = c.split()
+    for token in tokens:
+        for sinonimo, cocina in SINONIMOS_COCINA.items():
+            if len(sinonimo) >= 5 and token.startswith(sinonimo):
+                return cocina
+
     return None
-
-
 def _detectar_criterios(consulta: str) -> list:
     """Detecta criterios implícitos en la consulta (niños, terraza, etc.)."""
     c = _norm(consulta)
@@ -516,7 +565,16 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     señales de platos propios, O tener nombre_bonus + al menos 1 plato
     (propio o común). Sin eso, score = 0.
     """
-    MIN_SEÑALES_PROPIAS = 2  # mínimo de platos propios para puntuar sin nombre_bonus
+    # Para gallega y vasca exigimos más señales propias (más fácil tener 1 plato de marisco suelto)
+    MIN_SEÑALES_PROPIAS = 3 if cocina in ("gallega", "vasca") else 2
+
+    # Platos tan exclusivos que con 1 mención ya son señal válida
+    PLATOS_HIPERID = {
+        "gallega": {"percebes", "vieiras", "filloas", "tetilla", "pote gallego",
+                    "zorza", "caldo gallego", "lacon", "grelos", "albarino", "ribeiro"},
+        "vasca":   {"pintxos", "pintxo", "gilda", "txangurro", "kokotxas",
+                    "marmitako", "txakoli"},
+    }
 
     # Platos propios (muy identificativos) y comunes (necesitan contexto)
     PLATOS_PROPIOS = {
@@ -618,27 +676,41 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
             nombre_bonus = 5.0
             break
 
+    # Bonus fuerte si cocina_detectada del CSV coincide con la cocina buscada
+    # Esto respeta el trabajo ya hecho por analizar_todos_restaurantes.py
+    cocina_detectada_csv = _norm(str(row.get("cocina_detectada", "") or ""))
+    cocina_ascii = _norm(cocina)
+    if cocina_detectada_csv and (cocina_ascii in cocina_detectada_csv or cocina_detectada_csv in cocina_ascii):
+        nombre_bonus = max(nombre_bonus, 10.0)
+
     # Bonus por columna tipo_cocina si existe en el CSV
     tipo = _norm(str(row.get("tipo_cocina", "") or row.get("cocina", "") or ""))
-    cocina_ascii = _norm(cocina)
     if tipo and (cocina_ascii in tipo or tipo in cocina_ascii):
         nombre_bonus = max(nombre_bonus, 8.0)
 
     # Contar platos propios encontrados
+    # Para gallega/vasca, platos genéricos de marisco (zamburiñas) necesitan ≥ 2 menciones.
+    # Platos hiper-identificativos (percebes, vieiras, filloas...) valen con 1 mención.
+    hiperid = PLATOS_HIPERID.get(cocina, set())
+    MIN_MENCIONES_PROPIO = 2 if cocina in ("gallega", "vasca") else 1
     señales_propias = 0
     score_propios = 0.0
     for plato in propios_def:
         plato_norm = _norm(plato)
         if plato_norm in fuente:
-            señales_propias += 1
-            score_propios += 3.0
             po = next(
                 (p for p in platos_lista
                  if plato_norm in _norm(p["nombre"]) or _norm(p["nombre"]) in plato_norm),
                 None
             )
-            if po and po["menciones"] > 1:
-                score_propios += math.log2(po["menciones"])
+            menciones = po["menciones"] if po else 1
+            min_men = 1 if plato in hiperid else MIN_MENCIONES_PROPIO
+            if menciones < min_men:
+                continue   # señal demasiado débil
+            señales_propias += 1
+            score_propios += 3.0
+            if menciones > 1:
+                score_propios += math.log2(menciones)
 
     # Platos comunes: solo suman si hay contexto (platos propios O nombre_bonus)
     score_comunes = 0.0
@@ -709,15 +781,23 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
     """Evalúa si un restaurante cumple un criterio de filtro."""
     # Criterios derivados de columnas NLP directas
     MAPA_CRITERIO_COL = {
-        "ninos":          "criterio_ninos",
-        "mascotas":       "criterio_mascotas",
-        "terraza":        "criterio_terraza",
-        "vistas":         "criterio_vistas",
-        "musica_directo": "criterio_musica_directo",
-        "romantico":      "criterio_romantico",
+        "ninos":               "criterio_ninos",
+        "mascotas":            "criterio_mascotas",
+        "terraza":             "criterio_terraza",
+        "vistas":              "criterio_vistas",
+        "musica_directo":      "criterio_musica_directo",
+        "romantico":           "criterio_romantico",
+        "buen_postre":         "criterio_buen_postre",
+        "precio_calidad":      "criterio_precio_calidad",
+        "grupos_grandes":      "criterio_grupos_grandes",
+        "vegano_vegetariano":  "criterio_vegano_vegetariano",
+        "sin_gluten":          "criterio_sin_gluten",
     }
     if criterio in MAPA_CRITERIO_COL:
-        return bool(row.get(MAPA_CRITERIO_COL[criterio], False))
+        val = row.get(MAPA_CRITERIO_COL[criterio], False)
+        if isinstance(val, str):
+            val = val.strip().lower() == "true"
+        return bool(val)
 
     # Criterios derivados de dimensiones numéricas
     if criterio == "tranquilo":
@@ -734,7 +814,6 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
     if criterio == "centrico":
         dist = row.get("dist_sol")
         return dist is not None and float(dist) <= 1.5
-
     return True
 
 
@@ -745,10 +824,28 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     """
     # Platos destacados: convertir "croquetas(34), pulpo(21)" → ["croquetas", "pulpo"]
     platos_lista = _parsear_platos_str(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
+
+    # Filtrar nombres del personal para que no aparezcan como platos
+    personal_str = str(row.get("personal_destacado", "") or "")
+    nombres_personal = set()
+    for parte in personal_str.split(","):
+        nombre = re.sub(r'\(\d+\)$', '', parte).strip().lower()
+        if nombre and nombre != "nan":
+            nombres_personal.add(nombre)
+            # También añadir partes individuales del nombre (ej: "yenifer adrián" → {"yenifer", "adrián"})
+            for token in nombre.split():
+                if len(token) > 3:
+                    nombres_personal.add(token)
+
+    platos_lista = [
+        p for p in platos_lista
+        if p["nombre"].lower() not in nombres_personal
+        and not any(tok in nombres_personal for tok in p["nombre"].lower().split())
+    ]
     platos_destacados = [p["nombre"] for p in platos_lista]
 
     # Platos frecuencia: {"croquetas": 34, "pulpo": 21}
-    platos_frecuencia = _parsear_platos_frecuencia(str(row.get("todos_platos", "") or row.get("top5_platos", "") or ""))
+    platos_frecuencia = {p["nombre"]: p["menciones"] for p in platos_lista}
 
     # Generar resumen automático si no hay columna 'resumen'
     resumen = str(row.get("resumen", "") or "")
@@ -764,11 +861,16 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         resumen = ". ".join(partes) if partes else ""
 
     # Mapear criterios de Proyecto B → campos booleanos que espera el React
-    criterio_ninos    = bool(row.get("criterio_ninos", False))
-    criterio_mascotas = bool(row.get("criterio_mascotas", False))
-    criterio_terraza  = bool(row.get("criterio_terraza", False))
-    criterio_romantico = bool(row.get("criterio_romantico", False))
-    criterio_vistas   = bool(row.get("criterio_vistas", False))
+    criterio_ninos             = bool(row.get("criterio_ninos", False))
+    criterio_mascotas          = bool(row.get("criterio_mascotas", False))
+    criterio_terraza           = bool(row.get("criterio_terraza", False))
+    criterio_romantico         = bool(row.get("criterio_romantico", False))
+    criterio_vistas            = bool(row.get("criterio_vistas", False))
+    criterio_buen_postre       = bool(row.get("criterio_buen_postre", False))
+    criterio_precio_calidad    = bool(row.get("criterio_precio_calidad", False))
+    criterio_grupos_grandes    = bool(row.get("criterio_grupos_grandes", False))
+    criterio_vegano_veg        = bool(row.get("criterio_vegano_vegetariano", False))
+    criterio_sin_gluten        = bool(row.get("criterio_sin_gluten", False))
 
     # Derivar criterios del Proyecto A desde dimensiones NLP del Proyecto B
     # buena_comida: % positivo en dimensión comida
@@ -830,6 +932,27 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "recomendable_en_pareja":       criterio_romantico,
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
+        # Criterios nuevos — positivos
+        "buen_postre":                  criterio_buen_postre,
+        "buena_relacion_calidad_precio": criterio_precio_calidad,
+        "apto_grupos":                  criterio_grupos_grandes,
+        "opciones_veganas":             criterio_vegano_veg,
+        "apto_celiaco":                 criterio_sin_gluten,
+        # Advertencias — negativos (se muestran en rojo en Ver detalles)
+        "aviso_espera_larga":           float(row.get("velocidad_neg", 0) or 0) > 4,
+        "aviso_precio_elevado":         float(row.get("precio_neg", 0) or 0) > 4,
+        "aviso_servicio_mejorable":     float(row.get("servicio_neg", 0) or 0) > 6,
+        # Frases de reseñas que justifican cada criterio
+        "frases_criterios": {
+            k: str(row.get(f"criterio_{k}_frases", "") or "")
+            for k in ["ninos", "mascotas", "terraza", "vistas", "musica_directo",
+                      "romantico", "buen_postre", "precio_calidad",
+                      "grupos_grandes", "vegano_vegetariano", "sin_gluten"]
+            if str(row.get(f"criterio_{k}_frases", "") or "").strip()
+            and str(row.get(f"criterio_{k}_frases", "")).strip().lower() not in ("nan", "none", "")
+        },
+        "servicio_frases": "" if str(row.get("servicio_frases", "") or "").strip().lower() in ("nan","none","") else str(row.get("servicio_frases", "") or ""),
+        "personal_destacado": "" if str(row.get("personal_destacado", "") or "").strip().lower() in ("nan","none","") else str(row.get("personal_destacado", "") or ""),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
@@ -851,6 +974,16 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
 # BÚSQUEDA PRINCIPAL
 # ═══════════════════════════════════════════════════════════════════════════════
 
+STOPWORDS_BUSQUEDA = {
+    "quiero", "busco", "algo", "cerca", "de", "en", "por", "para", "con",
+    "un", "una", "unos", "unas", "los", "las", "el", "la", "que", "hay",
+    "donde", "puedo", "comer", "tomar", "ver", "ir", "dame", "dime",
+    "mucho", "muy", "bien", "buen", "buena", "buenos", "buenas",
+    "necesito", "pon", "recomienda",
+    "restaurante", "restaurantes", "sitio", "sitios", "lugar", "lugares",
+}
+
+
 def _buscar(consulta: str) -> tuple[list, dict]:
     """
     Motor de búsqueda principal. Devuelve (restaurantes_ordenados, meta).
@@ -868,18 +1001,38 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     zona_coords = _detectar_zona(consulta)
     criterios = _detectar_criterios(consulta)
 
+    # Tokens de zona — se excluyen del score de plato para evitar falsos positivos
+    # Ej: "croquetas cerca de malasaña" → tokens_zona=["malasana"], tokens_plato=["croquetas"]
+    tokens_zona = set()
+    if zona_coords:
+        for zona_key in ZONAS_MADRID:
+            if _norm(zona_key) in _norm(consulta):
+                tokens_zona.update(_norm(zona_key).split())
+    tokens_plato_candidatos = [
+        t for t in tokens
+        if t not in tokens_zona and t not in STOPWORDS_BUSQUEDA and len(t) >= 4
+    ]
+    # Validar que cada token candidato es un plato real en el CSV
+    # (score >= 2.5 en al menos 1 restaurante) — descarta zonas mal escritas y ruido
+    tokens_plato = [
+        t for t in tokens_plato_candidatos
+        if df.apply(lambda r: _score_texto(r, [t]), axis=1).max() >= 2.5
+    ]
+
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
 
-    # ── Score por texto/platos ─────────────────────────────────────
+    # ── Score por texto/platos (solo tokens de plato, sin tokens de zona) ──────
     if cocina:
         df["_score_match"] = df.apply(lambda r: _score_cocina(r, cocina), axis=1)
+    elif tokens_plato:
+        df["_score_match"] = df.apply(lambda r: _score_texto(r, tokens_plato), axis=1)
     else:
         df["_score_match"] = df.apply(lambda r: _score_texto(r, tokens), axis=1)
 
     # Buscar también por nombre del restaurante
     df["_score_nombre"] = df["nombre_display"].apply(
-        lambda n: 3.0 if any(t in _norm(str(n)) for t in tokens if len(t) >= 3) else 0.0
+        lambda n: 3.0 if any(t in _norm(str(n)) for t in tokens_plato if len(t) >= 3) else 0.0
     )
 
     # ── Score de distancia (si hay zona) ──────────────────────────
@@ -890,7 +1043,6 @@ def _buscar(consulta: str) -> tuple[list, dict]:
                 return _haversine(zona_coords, (float(lat), float(lon)))
             return 999.0
         df["_dist_zona"] = df.apply(_dist, axis=1)
-        # Score distancia: 10 a 0 km → score 10 a 0
         max_dist = df["_dist_zona"].replace(999.0, pd.NA).dropna().max() or 10.0
         df["_score_dist"] = (1 - (df["_dist_zona"] / max_dist).clip(0, 1)) * 10
     else:
@@ -898,12 +1050,31 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df["_score_dist"] = 0.0
 
     # ── Score final combinado ──────────────────────────────────────
-    if zona_coords:
-        # Con zona: 40% distancia + 35% calidad + 25% match
+    # hay_plato: solo True si hay tokens de plato con score real en el CSV
+    hay_plato = bool(tokens_plato) and df["_score_match"].max() >= 2.5
+
+    # Si el usuario pidió un plato/cocina concreto pero ningún restaurante lo tiene
+    # → devolver vacío con mensaje claro, nunca un ranking por calidad general
+    if tokens_plato and not hay_plato and not cocina:
+        return [], {
+            "cocina": None, "zona": zona_coords, "criterios": criterios,
+            "n_total": 0, "tokens_plato": tokens_plato, "hay_plato": False,
+            "sin_resultados_plato": True,
+        }
+
+    if zona_coords and hay_plato:
+        # Zona + plato: el plato filtra, la distancia ordena
+        # 70% distancia + 30% calidad (el plato ya filtra hard abajo)
         df["_score_final"] = (
-            df["_score_dist"]   * 0.40 +
-            df["_score_calidad"] * 0.35 +
-            (df["_score_match"] + df["_score_nombre"]).clip(0, 10) * 0.25
+            df["_score_dist"]    * 0.70 +
+            df["_score_calidad"] * 0.30
+        )
+    elif zona_coords:
+        # Solo zona: distancia manda
+        # 70% distancia + 30% calidad
+        df["_score_final"] = (
+            df["_score_dist"]    * 0.70 +
+            df["_score_calidad"] * 0.30
         )
     elif cocina or df["_score_match"].max() > 4:
         # Con match de texto/cocina: 50% match + 50% calidad
@@ -912,33 +1083,48 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             df["_score_calidad"] * 0.50
         )
     else:
-        # Sin match: solo calidad
+        # Sin ningún anclaje — no devolver nada
         df["_score_final"] = df["_score_calidad"]
 
     # ── Filtrar por criterios detectados ──────────────────────────
     df_filtrado = df.copy()
     for criterio in criterios:
         mascara = df_filtrado.apply(lambda r: _pasa_criterio(r, criterio), axis=1)
-        if mascara.sum() > 0:  # Solo filtrar si hay resultados
+        if mascara.sum() > 0:
             df_filtrado = df_filtrado[mascara]
 
     # ── Si con filtros quedan pocos, usar sin filtros ──────────────
     if len(df_filtrado) < 3 and len(criterios) > 0:
         df_filtrado = df.copy()
 
-    # ── Filtrar por score mínimo si hay cocina detectada ─────────────────────
+    # ── Filtrar hard por cocina — sin excepciones ────────────────────────────
     if cocina:
-        # Solo incluir restaurantes que superaron el umbral de platos (score > 0)
         df_con_match = df_filtrado[df_filtrado["_score_match"] > 0]
-        if len(df_con_match) >= 3:
-            df_filtrado = df_con_match
-        elif len(df_con_match) > 0:
-            # Si hay menos de 3 con score > 0, los mostramos igualmente (son los únicos relevantes)
-            df_filtrado = df_con_match
+        df_filtrado = df_con_match
+
+    # ── Filtrar hard por plato cuando hay zona ───────────────────────────────
+    # Umbral >= 2.5 para asegurar que el plato aparece como tal en reseñas
+    # (score 2.0 = mínimo por substring en tfidf, no es plato real)
+    UMBRAL_PLATO = 2.5
+    if zona_coords and hay_plato:
+        df_con_plato = df_filtrado[df_filtrado["_score_match"] >= UMBRAL_PLATO]
+        if len(df_con_plato) >= 2:
+            df_filtrado = df_con_plato
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
     n_resultados = 6 if (cocina or tokens or criterios) else 8
-    df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
+    if zona_coords and "_dist_zona" in df_filtrado.columns:
+        # Con zona: ordenar por distancia física real, no por score
+        df_top = (
+            df_filtrado[df_filtrado["_dist_zona"] < 999.0]
+            .sort_values("_dist_zona", ascending=True)
+            .head(n_resultados)
+        )
+        if len(df_top) < 2:
+            # Fallback si no hay suficientes con coords
+            df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
+    else:
+        df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
 
     restaurantes = []
     for _, row in df_top.iterrows():
@@ -947,11 +1133,28 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             dist_km = row["_dist_zona"]
         restaurantes.append(_fila_a_restaurante(row, distancia_km=dist_km))
 
+    # ── Sin ningún anclaje reconocible → pedir que reformule ─────────────────
+    # No devolver ranking por calidad si el usuario no especificó nada concreto
+    sin_anclaje = (
+        not cocina
+        and not zona_coords
+        and not criterios
+        and not hay_plato
+    )
+    if sin_anclaje:
+        return [], {
+            "cocina": None, "zona": None, "criterios": [],
+            "n_total": 0, "tokens_plato": [], "hay_plato": False,
+            "sin_anclaje": True,
+        }
+
     meta = {
-        "cocina": cocina,
-        "zona": zona_coords,
-        "criterios": criterios,
-        "n_total": len(df_filtrado),
+        "cocina":       cocina,
+        "zona":         zona_coords,
+        "criterios":    criterios,
+        "n_total":      len(df_filtrado),
+        "tokens_plato": tokens_plato,
+        "hay_plato":    hay_plato,
     }
     return restaurantes, meta
 
@@ -967,9 +1170,33 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     No usa LLM — es determinista y rápido.
     """
     if not restaurantes:
+        cocina_vacia = meta.get("cocina")
+        sin_resultados_plato = meta.get("sin_resultados_plato", False)
+        tokens_plato = meta.get("tokens_plato", [])
+
+        if cocina_vacia:
+            return (
+                f"No tengo restaurantes de cocina {cocina_vacia} con suficientes platos "
+                f"identificativos en mi base de datos. "
+                f"Prueba con 'restaurante gallego', 'pulpo a feira' o 'empanada gallega'."
+            )
+        if sin_resultados_plato and tokens_plato:
+            plato = tokens_plato[0]
+            zona_txt = " cerca de esa zona" if meta.get("zona") else ""
+            return (
+                f"No he encontrado restaurantes que destaquen por {plato}{zona_txt}. "
+                f"Prueba con un término diferente o amplía la zona de búsqueda."
+            )
+        if meta.get("sin_anclaje"):
+            return (
+                "No he entendido bien tu búsqueda. "
+                "Puedes preguntarme por una cocina (italiana, gallega, japonesa...), "
+                "un plato (croquetas, pulpo, sushi...), una zona de Madrid (Malasaña, Retiro, Chamberí...) "
+                "o una situación (romántico, con niños, con terraza...). ¿Qué estás buscando?"
+            )
         return (
-            "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
-            "Prueba con otros términos: tipo de cocina, plato concreto, zona de Madrid o criterios como terraza, niños, mascotas..."
+            "No he encontrado restaurantes que encajen con tu búsqueda. "
+            "Prueba con otro plato, cocina o zona de Madrid."
         )
 
     cocina    = meta.get("cocina")
@@ -982,22 +1209,27 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
         intro_parts.append(f"cocina {cocina}")
     if criterios:
         etiquetas = {
-            "romantico": "ambiente romántico", "ninos": "apto para niños",
-            "mascotas": "que admiten mascotas", "terraza": "con terraza",
-            "vistas": "con vistas", "musica_directo": "con música en directo",
-            "tranquilo": "tranquilos", "precio_ok": "con buen precio",
-            "muy_valorado": "muy valorados",
+            "romantico":          "ambiente romántico",
+            "ninos":              "apto para niños",
+            "mascotas":           "que admiten mascotas",
+            "terraza":            "con terraza",
+            "vistas":             "con vistas",
+            "musica_directo":     "con música en directo",
+            "tranquilo":          "tranquilos",
+            "precio_ok":          "con buen precio",
+            "muy_valorado":       "muy valorados",
+            "buen_postre":        "con buenos postres",
+            "precio_calidad":     "con buena relación calidad-precio",
+            "grupos_grandes":     "aptos para grupos o celebraciones",
+            "vegano_vegetariano": "con opciones veganas o vegetarianas",
+            "sin_gluten":         "con opciones sin gluten",
         }
         intro_parts.append(", ".join(etiquetas.get(c, c) for c in criterios))
 
-    if intro_parts:
-        intro = f"Aquí tienes mis recomendaciones de restaurantes con {' y '.join(intro_parts)}:"
-    elif zona:
-        intro = "Aquí tienes los restaurantes mejor valorados cerca de esa zona:"
-    else:
-        intro = f"Aquí tienes mis recomendaciones para «{consulta}»:"
+    tokens_plato = meta.get("tokens_plato", [])
+    hay_plato    = meta.get("hay_plato", False)
 
-    lineas = [intro, ""]
+    lineas = [""]
 
     for r in restaurantes:
         nombre  = r["nombre"]
@@ -1062,26 +1294,657 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     return "\n".join(lineas).strip()
 
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAG — INDEXACIÓN (ejecutar una vez: python main.py --indexar)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+CHROMA_DIR       = os.path.join(BASE_DIR, "chroma_db")
+COLLECTION_NAME  = "restaurantes_resenas"
+MAX_RESENAS_RAG  = 40   # reseñas por restaurante incluidas en el índice
+GEMINI_EMBED_MODEL = "models/embedding-001"  # gratuito, 1500 req/día, sin descarga
+
+# Instancia global de la colección ChromaDB (carga lazy en primer uso)
+_chroma_collection = None
+
+
+def _gemini_embed(textos: list[str]) -> list[list[float]]:
+    """
+    Genera embeddings usando Gemini embedding-001.
+    Gratuito (1500 req/día), sin descarga de modelo, funciona en Render free.
+    Devuelve lista de vectores float. Si falla, devuelve vectores vacíos.
+    """
+    if not GEMINI_API_KEY:
+        return [[] for _ in textos]
+
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"{GEMINI_EMBED_MODEL}:batchEmbedContents?key={GEMINI_API_KEY}"
+    )
+
+    # Gemini embedding acepta lotes de hasta 100
+    LOTE = 100
+    todos_vectores = []
+
+    for i in range(0, len(textos), LOTE):
+        lote = textos[i:i + LOTE]
+        requests_body = {
+            "requests": [
+                {
+                    "model": GEMINI_EMBED_MODEL,
+                    "content": {"parts": [{"text": t}]},
+                    "taskType": "RETRIEVAL_DOCUMENT",
+                }
+                for t in lote
+            ]
+        }
+        data = json.dumps(requests_body).encode()
+        try:
+            req  = _ureq.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+            resp = _ureq.urlopen(req, timeout=30)
+            result = json.loads(resp.read())
+            vectores = [e["values"] for e in result.get("embeddings", [])]
+            todos_vectores.extend(vectores)
+        except Exception as e:
+            print(f"  ⚠️  Error embedding Gemini: {e}")
+            todos_vectores.extend([[] for _ in lote])
+        time.sleep(0.1)  # respetar rate limit
+
+    return todos_vectores
+
+
+def _gemini_embed_query(texto: str) -> list[float]:
+    """Embedding para una consulta (taskType RETRIEVAL_QUERY)."""
+    if not GEMINI_API_KEY:
+        return []
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/"
+        f"{GEMINI_EMBED_MODEL}:embedContent?key={GEMINI_API_KEY}"
+    )
+    data = json.dumps({
+        "model": GEMINI_EMBED_MODEL,
+        "content": {"parts": [{"text": texto}]},
+        "taskType": "RETRIEVAL_QUERY",
+    }).encode()
+    try:
+        req  = _ureq.Request(url, data=data,
+                             headers={"Content-Type": "application/json"}, method="POST")
+        resp = _ureq.urlopen(req, timeout=15)
+        result = json.loads(resp.read())
+        return result.get("embedding", {}).get("values", [])
+    except Exception:
+        return []
+
+
+def _rag_construir_documento(row: pd.Series, resenas: list) -> str:
+    """
+    Texto que se indexa en ChromaDB para cada restaurante.
+    Combina el resumen estructurado del CSV con fragmentos de reseñas.
+    Compacto a propósito: chunks más pequeños = mejor recall semántico.
+    """
+    lineas = [f"Restaurante: {row.get('nombre', '')}"]
+
+    if row.get("cocina_detectada"):
+        lineas.append(f"Cocina: {row['cocina_detectada']}")
+    if row.get("tipo_establecimiento"):
+        lineas.append(f"Tipo: {row['tipo_establecimiento']}")
+    if row.get("top5_platos"):
+        lineas.append(f"Platos destacados: {row['top5_platos']}")
+    if row.get("personal_destacado"):
+        lineas.append(f"Personal destacado: {row['personal_destacado']}")
+
+    criterios = [
+        c.replace("criterio_", "")
+        for c in ["criterio_ninos", "criterio_mascotas", "criterio_terraza",
+                  "criterio_vistas", "criterio_musica_directo", "criterio_romantico"]
+        if str(row.get(c, "")).lower() == "true"
+    ]
+    if criterios:
+        lineas.append(f"Características: {', '.join(criterios)}")
+
+    if row.get("avg_estrellas_modelo"):
+        lineas.append(
+            f"Valoración modelo: {row['avg_estrellas_modelo']} estrellas "
+            f"({row.get('pct_positivo', 0)}% positivo)"
+        )
+
+    if resenas:
+        lineas.append("\nOpiniones:")
+        for r in resenas[:MAX_RESENAS_RAG]:
+            texto_limpio = re.sub(r'\s+', ' ', str(r)).strip()[:280]
+            lineas.append(f"- {texto_limpio}")
+
+    return "\n".join(lineas)
+
+
+def rag_indexar(verbose: bool = True):
+    """
+    Lee analisis_restaurantes.csv + resenas_unificadas.csv,
+    genera embeddings locales y persiste en ChromaDB.
+    Solo necesita ejecutarse una vez (o al añadir nuevas reseñas).
+    """
+    try:
+        import chromadb
+    except ImportError:
+        print("ERROR: instala chromadb:  pip install chromadb langgraph langchain-core")
+        return
+
+    csv_analisis = os.path.join(BASE_DIR, "analisis_restaurantes.csv")
+    csv_resenas  = os.path.join(BASE_DIR, "resenas_unificadas.csv")
+
+    if not os.path.exists(csv_analisis):
+        print(f"ERROR: No se encuentra {csv_analisis}")
+        return
+
+    if verbose:
+        print("Cargando CSVs...")
+    df_an = pd.read_csv(csv_analisis)
+    df_an["id_restaurante"] = df_an["id_restaurante"].astype(str)
+
+    df_res = pd.DataFrame()
+    col_id_res = col_texto = None
+    if os.path.exists(csv_resenas):
+        df_res = pd.read_csv(csv_resenas)
+        for c in ["Id_Restaurante", "id_restaurante", "id"]:
+            if c in df_res.columns:
+                col_id_res = c
+                break
+        for c in ["Review", "review", "texto", "Texto"]:
+            if c in df_res.columns:
+                col_texto = c
+                break
+        if col_id_res:
+            df_res[col_id_res] = df_res[col_id_res].astype(str)
+
+    if verbose:
+        print(f"  {len(df_an)} restaurantes | {len(df_res)} reseñas")
+
+    if not GEMINI_API_KEY:
+        print("ERROR: necesitas GEMINI_API_KEY para indexar con embeddings de Gemini.")
+        return
+
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    try:
+        client.delete_collection(COLLECTION_NAME)
+        if verbose:
+            print("  Colección anterior eliminada. Reindexando...")
+    except Exception:
+        pass
+
+    # ChromaDB sin embedding_function — gestionamos los embeddings manualmente
+    col = client.create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+    docs, ids, metas = [], [], []
+    for _, row in df_an.iterrows():
+        rid = str(row["id_restaurante"])
+        resenas = []
+        if col_id_res and col_texto and not df_res.empty:
+            resenas = (
+                df_res[df_res[col_id_res] == rid][col_texto]
+                .dropna().astype(str).tolist()
+            )
+        doc = _rag_construir_documento(row, resenas)
+        docs.append(doc)
+        ids.append(f"rest_{rid}")
+        metas.append({
+            "id_restaurante": rid,
+            "nombre":         str(row.get("nombre", "")),
+            "cocina":         str(row.get("cocina_detectada", "") or ""),
+            "valoracion":     float(row.get("avg_estrellas_modelo", 0) or 0),
+            "pct_positivo":   float(row.get("pct_positivo", 0) or 0),
+        })
+
+    # Generar embeddings con Gemini en lotes y añadir a ChromaDB
+    LOTE = 50
+    total = len(docs)
+    if verbose:
+        print(f"Generando embeddings y indexando {total} restaurantes (lotes de {LOTE})...")
+    for i in range(0, total, LOTE):
+        fin = min(i + LOTE, total)
+        lote_docs  = docs[i:fin]
+        lote_ids   = ids[i:fin]
+        lote_metas = metas[i:fin]
+        embeddings = _gemini_embed(lote_docs)
+        # Filtrar entradas sin embedding válido
+        validos = [(d, id_, m, e) for d, id_, m, e in
+                   zip(lote_docs, lote_ids, lote_metas, embeddings) if e]
+        if validos:
+            col.add(
+                documents  = [v[0] for v in validos],
+                ids        = [v[1] for v in validos],
+                metadatas  = [v[2] for v in validos],
+                embeddings = [v[3] for v in validos],
+            )
+        if verbose:
+            print(f"  [{fin}/{total}]")
+
+    if verbose:
+        print(f"✔ Indexación completa → {CHROMA_DIR}")
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# RAG — RETRIEVAL + GEMINI FLASH
+# Gemini solo se llama cuando el NLP no encuentra resultados relevantes.
+# Caché en disco: consultas repetidas = coste cero.
+# Coste estimado por consulta RAG: ~0.009 € (900 tokens input, 400 output)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+GEMINI_API_KEY  = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL    = "gemini-2.5-flash"
+CACHE_RAG_PATH  = os.path.join(BASE_DIR, ".cache_rag_respuestas.json")
+N_DOCS_RAG      = 5       # documentos a recuperar de ChromaDB
+MAX_TOKENS_RAG  = 400     # tokens máximos de output Gemini
+
+# Caché en memoria — se carga una sola vez al arrancar
+_cache_rag: dict = {}
+
+
+def _rag_cargar_cache():
+    global _cache_rag
+    if os.path.exists(CACHE_RAG_PATH):
+        try:
+            with open(CACHE_RAG_PATH, "r", encoding="utf-8") as f:
+                _cache_rag = json.load(f)
+        except Exception:
+            _cache_rag = {}
+
+
+def _rag_guardar_cache():
+    try:
+        with open(CACHE_RAG_PATH, "w", encoding="utf-8") as f:
+            json.dump(_cache_rag, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _rag_clave(consulta: str) -> str:
+    """Normaliza la consulta para usarla como clave de caché."""
+    c = consulta.lower().strip()
+    c = unicodedata.normalize("NFD", c)
+    c = "".join(ch for ch in c if unicodedata.category(ch) != "Mn")
+    return re.sub(r"[\W_]+", " ", c).strip()
+
+
+def _rag_get_collection():
+    """Carga ChromaDB de forma lazy (solo en el primer uso). Sin modelo local."""
+    global _chroma_collection
+    if _chroma_collection is not None:
+        return _chroma_collection
+    try:
+        import chromadb
+    except ImportError:
+        return None
+
+    if not os.path.exists(CHROMA_DIR):
+        return None
+
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    try:
+        # Sin embedding_function: los embeddings se pasan manualmente en cada query
+        _chroma_collection = client.get_collection(name=COLLECTION_NAME)
+    except Exception:
+        _chroma_collection = None
+    return _chroma_collection
+
+
+def _rag_buscar_semantico(consulta: str) -> list:
+    """Devuelve los N documentos más similares usando embedding de Gemini."""
+    col = _rag_get_collection()
+    if col is None:
+        return []
+    embedding = _gemini_embed_query(consulta)
+    if not embedding:
+        return []
+    try:
+        results = col.query(query_embeddings=[embedding], n_results=N_DOCS_RAG)
+        docs = []
+        for i in range(len(results["ids"][0])):
+            docs.append({
+                "id":        results["ids"][0][i],
+                "documento": results["documents"][0][i],
+                "metadata":  results["metadatas"][0][i],
+                "distancia": results["distances"][0][i],
+            })
+        return docs
+    except Exception:
+        return []
+
+
+def _rag_gemini_call(prompt: str) -> str:
+    """Llamada directa a Gemini Flash. Sin dependencias externas (solo urllib)."""
+    if not GEMINI_API_KEY:
+        return ""
+    data = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": MAX_TOKENS_RAG},
+    }).encode()
+    url = (
+        f"https://generativelanguage.googleapis.com/v1/models/"
+        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
+    for intento in range(3):
+        try:
+            req  = _ureq.Request(url, data=data,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+            resp = _ureq.urlopen(req, timeout=25)
+            result = json.loads(resp.read())
+            partes = result["candidates"][0]["content"]["parts"]
+            return " ".join(p.get("text", "") for p in partes if p.get("text")).strip()
+        except Exception as e:
+            if any(c in str(e) for c in ["503", "429", "500"]) and intento < 2:
+                time.sleep(2 ** (intento + 1))
+            else:
+                return ""
+    return ""
+
+
+def _rag_construir_prompt(consulta: str, docs: list, historial: list) -> str:
+    """Prompt compacto para minimizar tokens de entrada."""
+    contexto = "\n\n---\n\n".join(d["documento"][:650] for d in docs)
+
+    hist_texto = ""
+    if historial:
+        turnos = historial[-3:]  # máx 3 turnos para no inflar el prompt
+        hist_texto = "\nHistorial:\n" + "\n".join(
+            f"{'Usuario' if m['role'] == 'user' else 'Asistente'}: {m['content'][:180]}"
+            for m in turnos
+        ) + "\n"
+
+    return (
+        "Eres un asistente de recomendación de restaurantes de Madrid. "
+        "Responde en español, de forma breve y conversacional (máximo 4-5 oraciones). "
+        "Si la consulta no encaja con el contexto, dilo con naturalidad. "
+        "No inventes datos.\n"
+        f"{hist_texto}\n"
+        f"Contexto:\n{contexto}\n\n"
+        f"Pregunta: {consulta}\n\nRespuesta:"
+    )
+
+
+def rag_responder(consulta: str, historial: list) -> dict:
+    """
+    Punto de entrada del RAG. Busca en ChromaDB y genera con Gemini.
+    Devuelve {"respuesta": str, "restaurantes": list, "desde_cache": bool}.
+    """
+    clave = _rag_clave(consulta)
+
+    # ── Caché hit: coste cero ──────────────────────────────────────────────────
+    if clave in _cache_rag:
+        entrada = _cache_rag[clave]
+        return {
+            "respuesta":    entrada["respuesta"],
+            "restaurantes": entrada.get("restaurantes", []),
+            "desde_cache":  True,
+        }
+
+    # ── Retrieval semántico ────────────────────────────────────────────────────
+    docs = _rag_buscar_semantico(consulta)
+
+    if not docs:
+        return {
+            "respuesta": (
+                "No encontré restaurantes que encajen con tu búsqueda. "
+                "Prueba con un tipo de cocina o plato concreto."
+            ),
+            "restaurantes": [],
+            "desde_cache":  False,
+        }
+
+    # ── Generación con Gemini (o fallback sin API key) ─────────────────────────
+    if GEMINI_API_KEY:
+        prompt    = _rag_construir_prompt(consulta, docs, historial)
+        respuesta = _rag_gemini_call(prompt)
+    else:
+        respuesta = ""
+
+    if not respuesta:
+        nombres   = [d["metadata"].get("nombre", "—") for d in docs[:3]]
+        respuesta = (
+            "He encontrado estos restaurantes que pueden interesarte: "
+            + ", ".join(nombres) + ". "
+            "Para más detalle, prueba a ser más específico en tu búsqueda."
+        )
+
+    restaurantes_meta = [
+        {
+            "id_restaurante": d["metadata"].get("id_restaurante", ""),
+            "nombre":         d["metadata"].get("nombre", ""),
+            "cocina":         d["metadata"].get("cocina", ""),
+            "valoracion":     d["metadata"].get("valoracion", 0),
+            "similitud":      round(1 - d["distancia"], 3),
+        }
+        for d in docs
+    ]
+
+    # ── Guardar en caché ───────────────────────────────────────────────────────
+    _cache_rag[clave] = {"respuesta": respuesta, "restaurantes": restaurantes_meta}
+    _rag_guardar_cache()
+
+    return {"respuesta": respuesta, "restaurantes": restaurantes_meta, "desde_cache": False}
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AGENTE LANGGRAPH
+# Grafo: interpretar → nlp_search → router → [sintetizar | rag_search → sintetizar]
+#
+# Router activa RAG cuando:
+#   · El NLP devuelve < 2 resultados con score relevante
+#   · La consulta no tiene ningún anclaje (cocina / zona / criterio)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Umbrales del router — ajusta según tu distribución de scores
+UMBRAL_SCORE_NLP  = 1.0   # score mínimo para considerar NLP suficiente
+MIN_RESULTS_NLP   = 2     # resultados mínimos para evitar RAG
+
+
+class EstadoAgente(TypedDict):
+    consulta:          str
+    historial:         list          # [{"role": "user"/"assistant", "content": str}]
+    restaurantes_nlp:  Optional[list]
+    meta_nlp:          Optional[dict]
+    score_nlp:         float
+    usar_rag:          bool
+    respuesta:         str
+    restaurantes:      list
+    proyecto:          str           # "nlp" | "rag" | "rag_cache"
+
+
+def _agente_nodo_interpretar(estado: EstadoAgente) -> dict:
+    """Inicializa el estado. Punto de extensión para preprocesado futuro."""
+    return {
+        "restaurantes_nlp": None,
+        "meta_nlp":         None,
+        "score_nlp":        0.0,
+        "usar_rag":         False,
+        "respuesta":        "",
+        "restaurantes":     [],
+        "proyecto":         "nlp",
+    }
+
+
+def _agente_nodo_nlp_search(estado: EstadoAgente) -> dict:
+    """Motor NLP determinista — gratuito, sin ninguna API."""
+    try:
+        restaurantes, meta = _buscar(estado["consulta"])
+        score_max = max((r.get("_score_final", 0) for r in restaurantes), default=0.0)
+    except Exception:
+        restaurantes, meta, score_max = [], {}, 0.0
+    return {"restaurantes_nlp": restaurantes, "meta_nlp": meta, "score_nlp": score_max}
+
+
+def _agente_nodo_router(estado: EstadoAgente) -> dict:
+    """Decide si los resultados NLP son suficientes o hay que tirar de RAG."""
+    nlp = estado.get("restaurantes_nlp") or []
+    meta  = estado.get("meta_nlp") or {}
+    score = estado.get("score_nlp", 0.0)
+
+    sin_ancla = (
+        not meta.get("cocina")
+        and not meta.get("zona")
+        and not meta.get("criterios")
+    )
+
+    usar_rag = (
+        len(nlp) < MIN_RESULTS_NLP
+        or score < UMBRAL_SCORE_NLP
+        or sin_ancla
+    )
+    return {"usar_rag": usar_rag}
+
+
+def _agente_nodo_rag(estado: EstadoAgente) -> dict:
+    """Búsqueda semántica + Gemini (solo cuando el router lo decide)."""
+    resultado = rag_responder(estado["consulta"], estado["historial"])
+    proyecto  = "rag_cache" if resultado.get("desde_cache") else "rag"
+    return {
+        "respuesta":    resultado["respuesta"],
+        "restaurantes": resultado["restaurantes"],
+        "proyecto":     proyecto,
+    }
+
+
+def _agente_nodo_sintetizar(estado: EstadoAgente) -> dict:
+    """Formatea la respuesta final. Si venimos del NLP, genera el texto (gratuito)."""
+    if not estado.get("usar_rag"):
+        restaurantes = estado.get("restaurantes_nlp") or []
+        meta         = estado.get("meta_nlp") or {}
+        # Limpiar campos internos antes de devolver al frontend
+        restaurantes_limpios = [
+            {k: v for k, v in r.items() if not k.startswith("_")}
+            for r in restaurantes
+        ]
+        return {
+            "respuesta":    _generar_respuesta(estado["consulta"], restaurantes, meta),
+            "restaurantes": restaurantes_limpios,
+            "proyecto":     "nlp",
+        }
+    # RAG: la respuesta ya viene del nodo anterior
+    return {}
+
+
+def _agente_decide_camino(estado: EstadoAgente) -> str:
+    return "rag" if estado.get("usar_rag") else "sintetizar"
+
+
+def _construir_grafo_agente():
+    """Compila el grafo LangGraph una sola vez al arrancar."""
+    try:
+        from langgraph.graph import StateGraph, END
+    except ImportError:
+        return None
+
+    g = StateGraph(EstadoAgente)
+    g.add_node("interpretar", _agente_nodo_interpretar)
+    g.add_node("nlp_search",  _agente_nodo_nlp_search)
+    g.add_node("router",      _agente_nodo_router)
+    g.add_node("rag_search",  _agente_nodo_rag)
+    g.add_node("sintetizar",  _agente_nodo_sintetizar)
+
+    g.set_entry_point("interpretar")
+    g.add_edge("interpretar", "nlp_search")
+    g.add_edge("nlp_search",  "router")
+    g.add_conditional_edges(
+        "router", _agente_decide_camino,
+        {"rag": "rag_search", "sintetizar": "sintetizar"},
+    )
+    g.add_edge("rag_search", "sintetizar")
+    g.add_edge("sintetizar", END)
+
+    return g.compile()
+
+
+# Instancia global del agente (None si LangGraph no está instalado)
+_agente_grafo = None
+
+
+def agente_consultar(consulta: str, historial: list | None = None) -> dict:
+    """
+    Punto de entrada principal del agente conversacional.
+    Si LangGraph no está disponible, cae directamente al NLP (sin errores).
+    """
+    global _agente_grafo
+
+    # Inicialización lazy del grafo
+    if _agente_grafo is None:
+        _agente_grafo = _construir_grafo_agente()
+
+    historial = historial or []
+
+    # ── Fallback sin LangGraph ────────────────────────────────────────────────
+    if _agente_grafo is None:
+        try:
+            restaurantes, meta = _buscar(consulta)
+            respuesta = _generar_respuesta(consulta, restaurantes, meta)
+            restaurantes_limpios = [
+                {k: v for k, v in r.items() if not k.startswith("_")}
+                for r in restaurantes
+            ]
+        except Exception:
+            respuesta = "No pude procesar tu consulta. Prueba con otros términos."
+            restaurantes_limpios = []
+        return {"respuesta": respuesta, "restaurantes": restaurantes_limpios, "proyecto": "nlp"}
+
+    # ── Agente LangGraph ──────────────────────────────────────────────────────
+    estado_inicial: EstadoAgente = {
+        "consulta":          consulta,
+        "historial":         historial,
+        "restaurantes_nlp":  None,
+        "meta_nlp":          None,
+        "score_nlp":         0.0,
+        "usar_rag":          False,
+        "respuesta":         "",
+        "restaurantes":      [],
+        "proyecto":          "nlp",
+    }
+
+    resultado = _agente_grafo.invoke(estado_inicial)
+    return {
+        "respuesta":    resultado.get("respuesta", ""),
+        "restaurantes": resultado.get("restaurantes", []),
+        "proyecto":     resultado.get("proyecto", "nlp"),
+    }
+
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
     _inicializar()
+    _rag_cargar_cache()
+    yield
+
+app.router.lifespan_context = lifespan
 
 
 @app.get("/")
 def root():
-    return {"status": "ok", "mensaje": "API Restaurantes Madrid — NLP local (nlptown)"}
+    rag_disponible = os.path.exists(CHROMA_DIR)
+    return {
+        "status":  "ok",
+        "mensaje": "API Restaurantes Madrid — NLP local + RAG + LangGraph",
+        "rag":     rag_disponible,
+    }
 
 
 @app.get("/health")
 def health():
     return {
-        "status": "ok",
+        "status":               "ok",
         "restaurantes_cargados": len(df_global) if df_global is not None else 0,
-        "backend": "nlptown + análisis NLP local",
+        "backend":              "nlptown + RAG + LangGraph",
+        "rag_disponible":       os.path.exists(CHROMA_DIR),
+        "cache_rag_entradas":   len(_cache_rag),
     }
 
 
@@ -1092,20 +1955,21 @@ def endpoint_recomendar(request: ConsultaRequest):
     if df_global is None:
         raise HTTPException(status_code=503, detail="Datos no cargados aún, espera un momento")
 
+    historial = [
+        {"role": m.role, "content": m.content}
+        for m in (request.historial or [])
+    ]
+
     try:
-        restaurantes, meta = _buscar(request.consulta)
-        respuesta = _generar_respuesta(request.consulta, restaurantes, meta)
-
-        # Limpiar campos internos antes de devolver
-        for r in restaurantes:
-            r.pop("_pct_positivo", None)
-            r.pop("_avg_estrellas", None)
-
+        resultado = agente_consultar(
+            consulta  = request.consulta,
+            historial = historial,
+        )
         return RecomendacionResponse(
-            respuesta=respuesta,
-            proyecto="nlptown/bert + análisis NLP local",
-            restaurantes=restaurantes,
-            consulta_usuario=request.consulta,
+            respuesta        = resultado["respuesta"],
+            proyecto         = resultado["proyecto"],
+            restaurantes     = resultado["restaurantes"],
+            consulta_usuario = request.consulta,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1132,3 +1996,41 @@ def listar_restaurantes():
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/indexar")
+def endpoint_indexar():
+    """
+    Reconstruye la base vectorial ChromaDB.
+    Llamar solo cuando haya nuevas reseñas en resenas_unificadas.csv.
+    """
+    try:
+        rag_indexar(verbose=False)
+        global _chroma_collection
+        _chroma_collection = None   # forzar recarga en el próximo uso
+        return {"status": "ok", "mensaje": "Base vectorial reconstruida correctamente"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ENTRY POINT — python main.py --indexar
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    if "--indexar" in sys.argv:
+        print("Iniciando indexación RAG...")
+        # Cargar .env si existe
+        _env = os.path.join(BASE_DIR, ".env")
+        if os.path.exists(_env):
+            with open(_env) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+        rag_indexar(verbose=True)
+    else:
+        import uvicorn
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+

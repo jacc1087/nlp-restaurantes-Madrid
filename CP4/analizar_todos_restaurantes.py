@@ -162,14 +162,19 @@ PLATOS_WHITELIST = {
     'buñuelos','bunuelos','buñuelos de bacalao',
     'paella de mariscos','paella de marisco',
     # Platos asturianos y otras incorporaciones detectadas en producción
-    'cachopo','cachopu','cachopo de ternera','cachopo relleno',
-    'fabada asturiana','pote asturiano','oricios',
-    'tortos','torto','frixuelos',
+    'cachopo','cachopu','cachopo de ternera','cachopo relleno','cachopo casero',
+    'fabada asturiana','fabada','pote asturiano','pote gallego','oricios',
+    'tortos','torto','frixuelos','verdinas','verdinas con marisco',
+    'compango','cabrales','queso cabrales','afuega','gamonedo',
+    'sidra asturiana','botillo','chosco','cecina asturiana',
+    'merluza asturiana','pixín','pixin','centollo asturiano',
     # Platos vascos adicionales
     'pintxos','pintxo','gilda','pil pil',
     # Platos madrileños
+    'cocido madrileno','cocido madrileño','cocido','cocido completo',
+    'callos madrilenos','callos a la madrilena','huevos rotos','huevos estrellados',
     'bocadillo de calamares','bocata de calamar','soldaditos de pavía',
-    'patatas a la importancia','huevos estrellados',
+    'patatas a la importancia','migas',
     # Postres y dulces adicionales
     'arroz con leche','leche frita','bizcocho','magdalenas',
     'torrijas','rosquillas','buñuelos de viento',
@@ -178,10 +183,17 @@ PLATOS_WHITELIST = {
     'entraña','tira de asado','costillar',
     # Mariscos y pescados adicionales
     'zamburiñas','nécoras','centollo','buey de mar',
-    'lomos de bacalao','boquerones en vinagre','anchoas en salazón',
+    'boquerones','boquerones en vinagre','boquerones fritos','boquerones aceite',
+    'gambas al ajillo','gambas plancha','gambas pil pil',
+    'lomos de bacalao','anchoas en salazón','anchoas',
+    'carabineros','cigalas','ostras','navajas plancha',
+    # Platos con adjetivo geográfico que el extractor perdia
+    'cocido madrileno','fabada asturiana','lacon con grelos','caldo gallego',
+    'bacalao vizcaina','bacalao al pil pil','merluza vasca',
+    'pinchos','pintxo','pinchos morunos',
     # Bebidas y cócteles adicionales
-    'vermut','vermú','rebujito','tinto de verano',
-    'agua de valencia','txakoli',
+    'vermut','vermu','vermú','rebujito','tinto de verano',
+    'agua de valencia','txakoli','sidra',
 }
 
 # ── Falsos positivos confirmados — se rechazan SIEMPRE, ignorando la caché ──
@@ -254,6 +266,102 @@ PATRONES_NO_PLATO = re.compile(
     r'|'
     r'(mente|ísimo|ísima|ísimos|ísimas|ción|sión)$'
 )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DETECCIÓN DE COCINA POR PLATOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+PLATOS_POR_COCINA = {
+    'gallega':    ['empanada gallega', 'percebes', 'vieiras', 'caldo gallego', 'lacon', 'filloas', 'pote gallego', 'zorza'],
+    'asturiana':  ['cachopo', 'cachopu', 'fabada asturiana', 'fabada', 'oricios', 'cabrales', 'tortos', 'frixuelos', 'verdinas'],
+    'vasca':      ['pintxos', 'pintxo', 'gilda', 'kokotxas', 'cocochas', 'txangurro', 'marmitako', 'txakoli', 'pil pil', 'angulas'],
+    'andaluza':   ['pescaito frito', 'tortillitas de camarones', 'ajoblanco', 'berenjenas con miel', 'espinacas con garbanzos', 'cola de toro'],
+    'madrileña':  ['cocido madrileño', 'cocido madrileno', 'callos a la madrileña', 'bocadillo de calamares', 'soldaditos de pavia'],
+    'italiana':   ['carbonara', 'cacio e pepe', 'amatriciana', 'ossobuco', 'panna cotta', 'tiramisú', 'tiramisu',
+                   'tagliatelle', 'pappardelle', 'gnocchi', 'cannoli', 'arancini', 'burrata', 'lasaña', 'lasana', 'pizza', 'bruschetta', 'focaccia'],
+    'peruana':    ['lomo saltado', 'lomo salteado', 'causa', 'causa limeña', 'anticuchos', 'aji de gallina', 'leche de tigre', 'chaufa', 'tiradito'],
+    'japonesa':   ['ramen', 'sushi', 'sashimi', 'nigiri', 'gyozas', 'gyoza', 'tempura', 'udon', 'mochi', 'edamame', 'yakitori', 'takoyaki'],
+    'india':      ['tikka masala', 'biryani', 'naan', 'samosa', 'korma', 'dal', 'tandoori', 'butter chicken', 'palak paneer'],
+    'mexicana':   ['tacos', 'burrito', 'quesadilla', 'fajitas', 'enchilada', 'pozole', 'carnitas', 'chilaquiles', 'tamales'],
+    'venezolana': ['arepa', 'arepas', 'pabellon', 'cachapa', 'hallaca', 'tequeños', 'mandocas', 'caraotas'],
+    'argentina':  ['entraña', 'mollejas', 'chorizo criollo', 'empanadas argentinas', 'empanadas criollas', 'lomo alto', 'chimichurri', 'provoleta'],
+    'arabe':      ['shawarma', 'falafel', 'tabule', 'baba ganoush', 'labneh', 'shakshuka', 'kibbeh', 'couscous'],
+    'americana':  ['smash burger', 'pulled pork', 'costillas bbq', 'mac and cheese', 'chicken wings', 'brisket'],
+    'griega':     ['gyros', 'souvlaki', 'moussaka', 'spanakopita', 'baklava', 'dolmades'],
+    'china':      ['dim sum', 'wonton', 'pato pekin', 'chow mein', 'dumplings'],
+    'tailandesa': ['pad thai', 'tom yum', 'massaman', 'satay'],
+    'francesa':   ['foie gras', 'confit de pato', 'magret', 'bouillabaisse', 'escargots', 'cassoulet'],
+    'colombiana': ['bandeja paisa', 'ajiaco', 'sancocho'],
+}
+
+_NOMBRE_KEYWORDS = {
+    'gallega':    ['galicia', 'gallego', 'gallega'],
+    'asturiana':  ['asturian', 'asturias'],
+    'vasca':      ['txirimiri', 'dantxari', 'txoko', 'euskal'],
+    'andaluza':   ['gaditana', 'gaditano', 'sevill', 'andaluz'],
+    'madrileña':  ['madril'],
+    'argentina':  ['argentin', 'pampa beef', 'cabaña argentina', 'bayres', 'asado central', 'camoati'],
+    'italiana':   ['trattoria', 'pizzeria', 'pizzart', 'mozzarell', 'napoli', 'piamonte',
+                   'fusco', 'pastamore', 'malafemmena', 'malatesta', 'pulcinella',
+                   'maruzzella', 'oliveto', 'piccola', 'davanti', 'bresca'],
+    'japonesa':   ['sibuya', 'hotaru', 'miyama', 'ichikani', 'dokidoki', 'kaiten sushi', 'sr.ito', 'sakale'],
+    'india':      ['indian', 'tandoori', 'bangalore', 'kathmandu', 'purnima',
+                   'radhuni', 'curry masala', 'indian aroma'],
+    'mexicana':   ['taco bar', 'mawey', 'el rey de los tacos', 'tacos &'],
+    'peruana':    ['kausa', 'quispe', 'tampu', 'ronda 14'],
+    'venezolana': ['grama lounge'],
+    'arabe':      ['hummuseria', 'beytna'],
+    'americana':  ['steakburger', 'steak burger', 'hamburgues', 'burnout', 'brew wild'],
+    'fusion':     ['diverxo', 'streetxo', 'dstage', 'bacira', 'coque', 'bestial', 'casa jaguar'],
+}
+
+def _detectar_cocina_restaurante(todos_platos_str: str, nombre_restaurante: str = '') -> str:
+    import unicodedata as _ud, re as _re, math as _math
+    def _n(s):
+        s = s.lower().strip()
+        s = _ud.normalize('NFD', s)
+        return ''.join(c for c in s if _ud.category(c) != 'Mn')
+
+    # Capa 1: nombre
+    nombre_n = _n(nombre_restaurante)
+    for cocina, kws in _NOMBRE_KEYWORDS.items():
+        if any(kw in nombre_n for kw in kws):
+            return cocina
+
+    # Capa 2: platos exclusivos — si no hay señal clara, devuelve ''
+    if not todos_platos_str or str(todos_platos_str).strip() in ('', 'nan'):
+        return ''
+    platos = {}
+    for p in str(todos_platos_str).split(','):
+        m = _re.match(r'^(.+?)\((\d+)\)$', p.strip())
+        if m:
+            platos[_n(m.group(1).strip())] = int(m.group(2))
+    if not platos:
+        return ''
+    total = sum(platos.values())
+    mejor, mejor_score = '', 0.0
+    for cocina, defs in PLATOS_POR_COCINA.items():
+        matches, menciones = [], 0
+        for d in defs:
+            dn = _n(d)
+            for pr, mn in platos.items():
+                if dn == pr or (len(dn) > 5 and dn in pr):
+                    if mn >= 2:
+                        matches.append(mn)
+                        menciones += mn
+                    break
+        if len(matches) < 2:
+            if cocina == 'asturiana' and any(m >= 5 for m in matches):
+                pass
+            else:
+                continue
+        if menciones / total < 0.25:
+            continue
+        score = sum(2 + _math.log2(m) for m in matches)
+        if score > mejor_score:
+            mejor_score, mejor = score, cocina
+    return mejor
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Cache persistente
@@ -408,30 +516,52 @@ def _gemini_json(prompt, max_tokens=200):
 # Keywords de señal: palabras que indican que la reseña PUEDE mencionar el criterio.
 # Más estrictas que DIMENSIONES_KEYWORDS — solo palabras con alta especificidad.
 CRITERIOS_SIGNAL = {
-    'ninos':          ['niño','niños','niña','niñas','bebé','bebe','infantil',
-                       'sillita','trona','peques','pequeños','crío','crios','chaval'],
-    'mascotas':       ['perro','perros','mascota','mascotas','peludo','peludos',
-                       'admiten perros','dog','pet'],
-    'terraza':        ['terraza','terrazas','exterior','al aire libre',
-                       'patio','veladores','parasol'],
-    'vistas':         ['vistas','panorámica','panoramica','azotea','rooftop',
-                       'mirador','skyline','horizonte'],
-    'musica_directo': ['música en directo','música directo','concierto',
-                       'actuación','actuacion','banda','grupo en vivo','en vivo',
-                       'jazz','flamenco en directo'],
-    'romantico':      ['romántico','romantico','romántica','romantica',
-                       'íntimo','intimo','íntima','intima',
-                       'cena romántica','velas'],
+    # ── Criterios originales ──────────────────────────────────────────────────
+    'ninos':               ['niño','niños','niña','niñas','bebé','bebe','infantil',
+                            'sillita','trona','peques','pequeños','crío','crios','chaval'],
+    'mascotas':            ['perro','perros','mascota','mascotas','peludo','peludos',
+                            'admiten perros','dog','pet'],
+    'terraza':             ['terraza','terrazas','exterior','al aire libre',
+                            'patio','veladores','parasol'],
+    'vistas':              ['vistas','panorámica','panoramica','azotea','rooftop',
+                            'mirador','skyline','horizonte'],
+    'musica_directo':      ['música en directo','música directo','concierto',
+                            'actuación','actuacion','banda','grupo en vivo','en vivo',
+                            'jazz','flamenco en directo'],
+    'romantico':           ['romántico','romantico','romántica','romantica',
+                            'íntimo','intimo','íntima','intima',
+                            'cena romántica','velas'],
+    # ── Criterios nuevos ─────────────────────────────────────────────────────
+    'buen_postre':         ['postre','postres','tarta','helado','tiramisú','tiramisu',
+                            'mousse','coulant','brownie','cheesecake','flan',
+                            'crema catalana','panna cotta'],
+    'precio_calidad':      ['calidad precio','calidad-precio','relacion calidad',
+                            'relación calidad','precio razonable','precio asequible',
+                            'muy economico','muy económico','precio justo',
+                            'buena relacion','buena relación'],
+    'grupos_grandes':      ['grupo grande','grupos grandes','celebracion','celebración',
+                            'cumpleanos','cumpleaños','evento privado','reserva para grupo',
+                            'cena de empresa','comida de empresa','gran grupo'],
+    'vegano_vegetariano':  ['vegano','vegana','vegetariano','vegetariana',
+                            'opciones veganas','opciones vegetarianas',
+                            'plant based','sin carne','menú vegano'],
+    'sin_gluten':          ['sin gluten','celiaco','celiaca','celíaco','celíaca',
+                            'gluten free','opcion sin gluten','opción sin gluten'],
 }
 
 # Descripción corta para el prompt de Gemini
 CRITERIOS_DESC = {
-    'ninos':          'apto para niños o familias con bebés/niños pequeños',
-    'mascotas':       'admite mascotas o perros',
-    'terraza':        'tiene terraza o espacio exterior disponible',
-    'vistas':         'tiene vistas panorámicas, azotea o mirador',
-    'musica_directo': 'ofrece música en directo, conciertos o actuaciones',
-    'romantico':      'ambiente romántico o íntimo',
+    'ninos':               'apto para niños o familias con bebés/niños pequeños',
+    'mascotas':            'admite mascotas o perros',
+    'terraza':             'tiene terraza o espacio exterior disponible',
+    'vistas':              'tiene vistas panorámicas, azotea o mirador',
+    'musica_directo':      'ofrece música en directo, conciertos o actuaciones',
+    'romantico':           'ambiente romántico o íntimo',
+    'buen_postre':         'destacan los postres según los clientes',
+    'precio_calidad':      'buena relación calidad-precio mencionada explícitamente',
+    'grupos_grandes':      'apto para grupos grandes, celebraciones o eventos',
+    'vegano_vegetariano':  'tiene opciones veganas o vegetarianas claras',
+    'sin_gluten':          'tiene opciones sin gluten o apto para celíacos',
 }
 
 def _extraer_fragmentos(serie_reviews, keywords, ventana=40):
@@ -1017,6 +1147,31 @@ def analizar_restaurante(df_r):
     # Una sola llamada a Gemini (n=15) — top5 es simplemente los primeros 5
     platos_todos = extraer_platos(df_r['Review'], n=15, nombre_restaurante=nombre)
     platos_todos = _dedup_local(platos_todos)[:15]  # fusionar variantes localmente
+
+    # ── Recuperación de platos de whitelist con alta frecuencia no detectados ──
+    # Segundo barrido: buscar platos de PLATOS_WHITELIST que aparezcan en >= 3
+    # reseñas distintas pero que el extractor de bigramas haya perdido
+    # (ej: "cocido madrileño" porque "madrileño" está en NO_PLATOS)
+    MIN_MENCIONES_RECUPERACION = 3
+    platos_ya_detectados = {limpiar(p) for p, _ in platos_todos}
+    textos_resenas = df_r['Review'].astype(str).tolist()
+    for plato_wl in sorted(PLATOS_WHITELIST):
+        plato_limpio = limpiar(plato_wl)
+        # Saltar si ya está detectado o es muy genérico (< 4 chars)
+        if len(plato_limpio) < 4:
+            continue
+        if any(plato_limpio in det or det in plato_limpio
+               for det in platos_ya_detectados):
+            continue
+        # Contar menciones en reseñas distintas
+        menciones = sum(1 for r in textos_resenas if plato_limpio in limpiar(str(r)))
+        if menciones >= MIN_MENCIONES_RECUPERACION:
+            platos_todos.append((plato_wl, menciones))
+            platos_ya_detectados.add(plato_limpio)
+    # Re-ordenar por menciones
+    platos_todos.sort(key=lambda x: -x[1])
+    platos_todos = platos_todos[:15]
+
     platos_top   = platos_todos[:5]
     platos_str   = ', '.join([f"{p}({c})" for p,c in platos_top])
     todos_str    = ', '.join([f"{p}({c})" for p,c in platos_todos])
@@ -1092,6 +1247,7 @@ def analizar_restaurante(df_r):
         'todos_platos':         todos_str,
         'personal_destacado':   personal_str,
         'terminos_tfidf':       tfidf_str,
+        'cocina_detectada':     _detectar_cocina_restaurante(todos_str, nombre),
     }
 
     df_r_out = df_r[['Id_Restaurante','Restaurante','Id_review','Review',
@@ -1324,5 +1480,88 @@ for i, rid in enumerate(ids_pendientes, 1):
         import traceback
         print(f"    ✗ Error: {e}")
         traceback.print_exc()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST-PROCESADO: recuperación de platos y detección de cocina para TODOS
+# Se aplica sobre el CSV final ya generado, sin reprocesar BERT
+# ─────────────────────────────────────────────────────────────────────────────
+print("\nPost-procesando: recuperación de platos whitelist y cocina_detectada...")
+
+df_final = pd.read_csv(OUTPUT_CSV)
+df_resenas_cargadas = pd.read_csv(OUTPUT_RESENAS) if os.path.exists(OUTPUT_RESENAS) else df.rename(columns={'Review':'Review'})
+
+MIN_MENCIONES_RECUPERACION = 3
+actualizados_platos = 0
+actualizados_cocina = 0
+
+for idx, row in df_final.iterrows():
+    rid = int(row['id_restaurante'])
+    nombre_r = str(row['nombre'])
+
+    # Reseñas de este restaurante
+    try:
+        resenas_r = df_resenas_cargadas[df_resenas_cargadas['Id_Restaurante'] == rid]['Review'].astype(str).tolist()
+    except Exception:
+        resenas_r = df[df['Id_Restaurante'] == rid]['Review'].astype(str).tolist()
+
+    if not resenas_r:
+        continue
+
+    # Platos ya detectados
+    todos_str = str(row.get('todos_platos', '') or '')
+    platos_actuales = {}
+    for parte in todos_str.split(','):
+        m = re.match(r'^(.+?)\((\d+)\)$', parte.strip())
+        if m:
+            platos_actuales[limpiar(m.group(1).strip())] = int(m.group(2))
+
+    # Segundo barrido: buscar platos de whitelist no detectados
+    nuevos = []
+    for plato_wl in sorted(PLATOS_WHITELIST):
+        plato_limpio = limpiar(plato_wl)
+        if len(plato_limpio) < 4:
+            continue
+        # Ya está detectado (exact o parcial)
+        if any(plato_limpio in det or det in plato_limpio
+               for det in platos_actuales):
+            continue
+        menciones = sum(1 for r in resenas_r if plato_limpio in limpiar(str(r)))
+        if menciones >= MIN_MENCIONES_RECUPERACION:
+            nuevos.append((plato_wl, menciones))
+            platos_actuales[plato_limpio] = menciones  # evitar duplicados
+
+    if nuevos:
+        nuevos.sort(key=lambda x: -x[1])
+        nuevos_str = ', '.join(f"{p}({c})" for p, c in nuevos)
+        if todos_str and todos_str != 'nan':
+            df_final.at[idx, 'todos_platos'] = nuevos_str + ', ' + todos_str
+        else:
+            df_final.at[idx, 'todos_platos'] = nuevos_str
+        todos_str = df_final.at[idx, 'todos_platos']
+        actualizados_platos += 1
+        print(f"  [{rid}] {nombre_r}: +{[f'{p}({c})' for p,c in nuevos]}")
+
+    # Detectar cocina
+    cocina = _detectar_cocina_restaurante(todos_str, nombre_r)
+    current = str(row.get('cocina_detectada', '') or '')
+    if cocina and current in ('', 'nan'):
+        df_final.at[idx, 'cocina_detectada'] = cocina
+        actualizados_cocina += 1
+    elif not cocina and current in ('', 'nan'):
+        df_final.at[idx, 'cocina_detectada'] = ''
+
+    # personal_destacado: aplicar si está vacío
+    personal_actual = str(row.get('personal_destacado', '') or '')
+    if personal_actual in ('', 'nan'):
+        personal = extraer_personal(resenas_r, platos_set=set(platos_actuales.keys()), n_resenas=len(resenas_r), n=3)
+        if personal:
+            df_final.at[idx, 'personal_destacado'] = ', '.join(
+                f"{n.capitalize()}({c})" for n, c in personal
+            )
+
+df_final.to_csv(OUTPUT_CSV, index=False)
+print(f"  Platos recuperados en {actualizados_platos} restaurantes")
+print(f"  Cocina detectada en {actualizados_cocina} restaurantes")
+print(f"  CSV actualizado: {OUTPUT_CSV}")
 
 print(f"\n{'='*60}\n¡Completado!\n  → {OUTPUT_CSV}\n  → {OUTPUT_RESENAS}")
