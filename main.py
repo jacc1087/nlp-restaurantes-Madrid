@@ -1009,7 +1009,16 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Score final combinado ──────────────────────────────────────
     # hay_plato: solo True si hay tokens de plato con score real en el CSV
-    hay_plato = bool(tokens_plato) and df["_score_match"].max() > 0
+    hay_plato = bool(tokens_plato) and df["_score_match"].max() >= 2.5
+
+    # Si el usuario pidió un plato/cocina concreto pero ningún restaurante lo tiene
+    # → devolver vacío con mensaje claro, nunca un ranking por calidad general
+    if tokens_plato and not hay_plato and not cocina:
+        return [], {
+            "cocina": None, "zona": zona_coords, "criterios": criterios,
+            "n_total": 0, "tokens_plato": tokens_plato, "hay_plato": False,
+            "sin_resultados_plato": True,
+        }
 
     if zona_coords and hay_plato:
         # Zona + plato: el plato filtra, la distancia ordena
@@ -1105,15 +1114,25 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
     """
     if not restaurantes:
         cocina_vacia = meta.get("cocina")
+        sin_resultados_plato = meta.get("sin_resultados_plato", False)
+        tokens_plato = meta.get("tokens_plato", [])
+
         if cocina_vacia:
             return (
                 f"No tengo restaurantes de cocina {cocina_vacia} con suficientes platos "
                 f"identificativos en mi base de datos. "
                 f"Prueba con 'restaurante gallego', 'pulpo a feira' o 'empanada gallega'."
             )
+        if sin_resultados_plato and tokens_plato:
+            plato = tokens_plato[0]
+            zona_txt = " cerca de esa zona" if meta.get("zona") else ""
+            return (
+                f"No he encontrado restaurantes que destaquen por {plato}{zona_txt}. "
+                f"Prueba con un término diferente o amplía la zona de búsqueda."
+            )
         return (
             "No he encontrado nada con esos términos. "
-            "Prueba siendo más específico: tipo de cocina (italiana, japonesa, gallega...), "
+            "Prueba con un tipo de cocina (italiana, japonesa, gallega...), "
             "un plato concreto (croquetas, pulpo, sushi...) o una zona de Madrid."
         )
 
