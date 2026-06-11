@@ -949,8 +949,9 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
                       "romantico", "buen_postre", "precio_calidad",
                       "grupos_grandes", "vegano_vegetariano", "sin_gluten"]
             if str(row.get(f"criterio_{k}_frases", "") or "").strip()
+            and str(row.get(f"criterio_{k}_frases", "")).strip().lower() not in ("nan", "none", "")
         },
-        "servicio_frases": str(row.get("servicio_frases", "") or ""),
+        "servicio_frases": "" if str(row.get("servicio_frases", "") or "").strip().lower() in ("nan","none","") else str(row.get("servicio_frases", "") or ""),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
