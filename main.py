@@ -1038,7 +1038,18 @@ def _buscar(consulta: str) -> tuple[list, dict]:
 
     # ── Ordenar y tomar top N ──────────────────────────────────────
     n_resultados = 6 if (cocina or tokens or criterios) else 8
-    df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
+    if zona_coords and "_dist_zona" in df_filtrado.columns:
+        # Con zona: ordenar por distancia física real, no por score
+        df_top = (
+            df_filtrado[df_filtrado["_dist_zona"] < 999.0]
+            .sort_values("_dist_zona", ascending=True)
+            .head(n_resultados)
+        )
+        if len(df_top) < 2:
+            # Fallback si no hay suficientes con coords
+            df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
+    else:
+        df_top = df_filtrado.sort_values("_score_final", ascending=False).head(n_resultados)
 
     restaurantes = []
     for _, row in df_top.iterrows():
