@@ -955,18 +955,29 @@ def _buscar(consulta: str) -> tuple[list, dict]:
     zona_coords = _detectar_zona(consulta)
     criterios = _detectar_criterios(consulta)
 
+    # Tokens de zona — se excluyen del score de plato para evitar falsos positivos
+    # Ej: "croquetas cerca de malasaña" → tokens_zona=["malasana"], tokens_plato=["croquetas"]
+    tokens_zona = set()
+    if zona_coords:
+        for zona_key in ZONAS_MADRID:
+            if _norm(zona_key) in _norm(consulta):
+                tokens_zona.update(_norm(zona_key).split())
+    tokens_plato = [t for t in tokens if t not in tokens_zona]
+
     # Calcular score base de calidad para todos
     df["_score_calidad"] = df.apply(_score_calidad, axis=1)
 
-    # ── Score por texto/platos ─────────────────────────────────────
+    # ── Score por texto/platos (solo tokens de plato, sin tokens de zona) ──────
     if cocina:
         df["_score_match"] = df.apply(lambda r: _score_cocina(r, cocina), axis=1)
+    elif tokens_plato:
+        df["_score_match"] = df.apply(lambda r: _score_texto(r, tokens_plato), axis=1)
     else:
         df["_score_match"] = df.apply(lambda r: _score_texto(r, tokens), axis=1)
 
     # Buscar también por nombre del restaurante
     df["_score_nombre"] = df["nombre_display"].apply(
-        lambda n: 3.0 if any(t in _norm(str(n)) for t in tokens if len(t) >= 3) else 0.0
+        lambda n: 3.0 if any(t in _norm(str(n)) for t in tokens_plato if len(t) >= 3) else 0.0
     )
 
     # ── Score de distancia (si hay zona) ──────────────────────────
@@ -977,7 +988,6 @@ def _buscar(consulta: str) -> tuple[list, dict]:
                 return _haversine(zona_coords, (float(lat), float(lon)))
             return 999.0
         df["_dist_zona"] = df.apply(_dist, axis=1)
-        # Score distancia: 10 a 0 km → score 10 a 0
         max_dist = df["_dist_zona"].replace(999.0, pd.NA).dropna().max() or 10.0
         df["_score_dist"] = (1 - (df["_dist_zona"] / max_dist).clip(0, 1)) * 10
     else:
@@ -985,7 +995,8 @@ def _buscar(consulta: str) -> tuple[list, dict]:
         df["_score_dist"] = 0.0
 
     # ── Score final combinado ──────────────────────────────────────
-    hay_plato = bool(tokens) and df["_score_match"].max() > 0
+    # hay_plato: solo True si hay tokens de plato con score real en el CSV
+    hay_plato = bool(tokens_plato) and df["_score_match"].max() > 0
 
     if zona_coords and hay_plato:
         # Zona + plato: el plato filtra, la distancia ordena
