@@ -441,7 +441,7 @@ SINONIMOS_COCINA = {
     "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
     "espanol": "española", "espanola": "española", "espana": "española",
     "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
+    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega", "galego": "gallega", "galega": "gallega", "galeg": "gallega",
     "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
     "frances": "francesa", "francesa": "francesa", "francia": "francesa",
     "griego": "griega", "griega": "griega", "grecia": "griega",
@@ -455,7 +455,7 @@ SINONIMOS_COCINA = {
 }
 
 FRASES_COCINA = {
-    "cocina gallega": "gallega", "comida gallega": "gallega",
+    "cocina gallega": "gallega", "comida gallega": "gallega", "cocina galega": "gallega", "comida galega": "gallega",
     "restaurante gallego": "gallega", "gastronomia gallega": "gallega",
     "cocina vasca": "vasca", "comida vasca": "vasca",
     "restaurante vasco": "vasca", "gastronomia vasca": "vasca",
@@ -1070,13 +1070,14 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
         cocina_vacia = meta.get("cocina")
         if cocina_vacia:
             return (
-                f"No tengo en mi base de datos restaurantes de cocina {cocina_vacia} "
-                f"con suficientes platos identificativos de esa cocina. "
-                f"Prueba con una búsqueda más amplia o consulta por un plato concreto."
+                f"No tengo restaurantes de cocina {cocina_vacia} con suficientes platos "
+                f"identificativos en mi base de datos. "
+                f"Prueba con 'restaurante gallego', 'pulpo a feira' o 'empanada gallega'."
             )
         return (
-            "No he encontrado restaurantes que coincidan exactamente con tu búsqueda. "
-            "Prueba con otros términos: tipo de cocina, plato concreto, zona de Madrid o criterios como terraza, niños, mascotas..."
+            "No he encontrado nada con esos términos. "
+            "Prueba siendo más específico: tipo de cocina (italiana, japonesa, gallega...), "
+            "un plato concreto (croquetas, pulpo, sushi...) o una zona de Madrid."
         )
 
     cocina    = meta.get("cocina")
