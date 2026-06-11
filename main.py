@@ -434,24 +434,75 @@ COCINAS = {
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
 
 SINONIMOS_COCINA = {
-    "mexicano": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
-    "italiano": "italiana", "italia": "italiana",
-    "japones": "japonesa", "japon": "japonesa",
-    "indio": "india", "hindu": "india", "india": "india",
-    "peruano": "peruana", "peru": "peruana",
-    "espanol": "española", "espanola": "española",
-    "asturiano": "asturiana", "asturias": "asturiana",
-    "gallego": "gallega", "galicia": "gallega",
-    "vasco": "vasca", "pais vasco": "vasca", "euskadi": "vasca",
-    "frances": "francesa", "francia": "francesa",
-    "griego": "griega", "grecia": "griega",
-    "arabe": "arabe", "libanes": "arabe", "libano": "arabe",
-    "venezolano": "venezolana", "venezuela": "venezolana",
-    "colombiano": "colombiana", "colombia": "colombiana",
-    "chino": "china",
-    "tailandes": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
-    "americano": "americana", "usa": "americana",
-    "mediterraneo": "mediterranea",
+    # Mexicana
+    "mexicano": "mexicana", "mexicana": "mexicana", "mexico": "mexicana", "mejico": "mexicana",
+    # Italiana
+    "italiano": "italiana", "italiana": "italiana", "italia": "italiana",
+    # Japonesa
+    "japones": "japonesa", "japonesa": "japonesa", "japon": "japonesa", "sushi": "japonesa",
+    # India
+    "indio": "india", "india": "india", "hindu": "india",
+    # Peruana
+    "peruano": "peruana", "peruana": "peruana", "peru": "peruana",
+    # Española
+    "espanol": "española", "espanola": "española", "espana": "española",
+    # Asturiana
+    "asturiano": "asturiana", "asturiana": "asturiana", "asturias": "asturiana",
+    # Gallega — todas las variantes morfológicas
+    "gallego": "gallega", "gallega": "gallega", "galicia": "gallega",
+    "galleg": "gallega",  # prefijo para "gallegas", "gallegos"
+    # Vasca
+    "vasco": "vasca", "vasca": "vasca", "pais vasco": "vasca",
+    "euskadi": "vasca", "bilbao": "vasca", "donostia": "vasca",
+    # Francesa
+    "frances": "francesa", "francesa": "francesa", "francia": "francesa",
+    # Griega
+    "griego": "griega", "griega": "griega", "grecia": "griega",
+    # Árabe
+    "arabe": "arabe", "libanes": "arabe", "libano": "arabe", "marroqui": "arabe",
+    # Venezolana
+    "venezolano": "venezolana", "venezolana": "venezolana", "venezuela": "venezolana",
+    # Colombiana
+    "colombiano": "colombiana", "colombiana": "colombiana", "colombia": "colombiana",
+    # China
+    "chino": "china", "china": "china",
+    # Tailandesa
+    "tailandes": "tailandesa", "tailandesa": "tailandesa",
+    "tailandia": "tailandesa", "thai": "tailandesa",
+    # Americana
+    "americano": "americana", "americana": "americana", "usa": "americana",
+    "hamburguesa": "americana", "burger": "americana",
+    # Mediterránea
+    "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+    # Persa
+    "persa": "persa", "iran": "persa", "iraní": "persa",
+}
+
+# Frases completas que se normalizan antes de buscar en SINONIMOS_COCINA
+# Resuelve "cocina gallega", "comida gallega", "restaurante gallego", etc.
+FRASES_COCINA = {
+    "cocina gallega": "gallega", "comida gallega": "gallega",
+    "restaurante gallego": "gallega", "gastronomia gallega": "gallega",
+    "cocina vasca": "vasca", "comida vasca": "vasca",
+    "restaurante vasco": "vasca", "gastronomia vasca": "vasca",
+    "cocina italiana": "italiana", "comida italiana": "italiana",
+    "restaurante italiano": "italiana", "pasta italiana": "italiana",
+    "cocina japonesa": "japonesa", "comida japonesa": "japonesa",
+    "restaurante japones": "japonesa",
+    "cocina mexicana": "mexicana", "comida mexicana": "mexicana",
+    "restaurante mexicano": "mexicana",
+    "cocina peruana": "peruana", "comida peruana": "peruana",
+    "restaurante peruano": "peruana",
+    "cocina francesa": "francesa", "comida francesa": "francesa",
+    "restaurante frances": "francesa",
+    "cocina china": "china", "comida china": "china",
+    "restaurante chino": "china",
+    "cocina india": "india", "comida india": "india",
+    "restaurante indio": "india",
+    "cocina americana": "americana", "comida americana": "americana",
+    "cocina griega": "griega", "comida griega": "griega",
+    "cocina arabe": "arabe", "comida arabe": "arabe",
+    "cocina asturiana": "asturiana", "comida asturiana": "asturiana",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -475,12 +526,28 @@ INTENCIONES_CRITERIO = {
 
 def _detectar_cocina(consulta: str) -> Optional[str]:
     c = _norm(consulta)
-    # Buscar sinónimos como palabras completas
-    for sinonimo, cocina in SINONIMOS_COCINA.items():
-        padded = " " + c + " "
-        if (f" {sinonimo} " in padded or c == sinonimo
-                or c.startswith(sinonimo + " ") or c.endswith(" " + sinonimo)):
+
+    # 1. Frases completas primero (máxima precisión)
+    for frase, cocina in FRASES_COCINA.items():
+        if frase in c:
             return cocina
+
+    # 2. Sinónimos como tokens individuales
+    padded = " " + c + " "
+    for sinonimo, cocina in SINONIMOS_COCINA.items():
+        if (f" {sinonimo} " in padded
+                or c == sinonimo
+                or c.startswith(sinonimo + " ")
+                or c.endswith(" " + sinonimo)):
+            return cocina
+
+    # 3. Prefijos (cubre "gallegas", "gallegos", "vascos", etc.)
+    tokens = c.split()
+    for token in tokens:
+        for sinonimo, cocina in SINONIMOS_COCINA.items():
+            if len(sinonimo) >= 5 and token.startswith(sinonimo):
+                return cocina
+
     return None
 
 
