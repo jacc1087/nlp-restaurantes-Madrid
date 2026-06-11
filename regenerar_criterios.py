@@ -3,11 +3,10 @@ regenerar_criterios.py
 ──────────────────────
 Calcula criterios directamente desde las reseñas sin Gemini ni APIs externas.
 
-Mejoras v4:
-  - extraer_oracion() valida que la keyword esté en la oración devuelta
-  - MIN_MENCIONES más estrictos para criterios ambiguos
-  - Si la oración no es suficientemente relevante, se descarta
-  - Sin APIs externas
+Mejoras v5:
+  - partir_en_segmentos: corta por puntuación, comas Y conectores "y + artículo"
+  - extraer_oracion: nunca trunca — si no cabe completo, descarta
+  - limpiar_frase: elimina conectores sueltos al inicio del fragmento
 
 Uso: python3.11 regenerar_criterios.py
 """
@@ -27,8 +26,12 @@ def limpiar_frase(texto: str) -> str:
     texto = texto.strip()
     if not texto:
         return texto
+    # eliminar conectores sueltos al inicio (artefacto del split por "y")
+    texto = re.sub(r'^(y |e |pero |aunque |también |además )', '', texto, flags=re.IGNORECASE).strip()
+    if not texto:
+        return texto
     texto = texto[0].upper() + texto[1:]
-    if texto[-1] not in ".!?…":
+    if texto[-1] not in ".!?":
         texto += "."
     return texto
 
@@ -48,7 +51,6 @@ CRITERIOS = {
     "sin_gluten":         ["sin gluten","celiaco","celiaca","celíaco","celíaca","gluten free","intolerancia al gluten","apto celiaco"],
 }
 
-# Más estrictos: si hay dudas, que no salga
 MIN_MENCIONES = {
     "ninos":              3,
     "mascotas":           2,
@@ -56,8 +58,8 @@ MIN_MENCIONES = {
     "vistas":             2,
     "musica_directo":     2,
     "romantico":          3,
-    "buen_postre":        4,   # ← más exigente, era 3
-    "precio_calidad":     4,   # ← más exigente, era 3
+    "buen_postre":        4,
+    "precio_calidad":     4,
     "grupos_grandes":     3,
     "vegano_vegetariano": 2,
     "sin_gluten":         2,
@@ -71,34 +73,36 @@ def tiene_negacion(texto, keyword, ventana=25):
 
 def partir_en_segmentos(texto):
     """
-    Divide el texto en segmentos usando:
-      - Punto, exclamación, interrogación, salto de línea
-      - Coma seguida de conector frecuente
+    Divide el texto en segmentos usando como delimitadores:
+      1. Puntuación fuerte: . ! ? newline
+      2. Cualquier coma
+      3. " y " seguido de artículo o adverbio frecuente
     Devuelve lista de (inicio, fin) sobre el texto original.
     """
     patron = re.compile(
-        r'[.!?\n]+|,\s*(?=y |pero |aunque |además |también |sin embargo |eso sí |eso si )',
+        r'[.!?\n]+'
+        r'|,\s*(?=\w)'
+        r'| y (?=(?:el |la |los |las |un |una |todo |muy |lo |también |además |super |súper |fue |es |era |están |estaba ))',
         re.IGNORECASE
     )
     cortes = [0]
     for m in patron.finditer(texto):
+        cortes.append(m.start())
         cortes.append(m.end())
     cortes.append(len(texto))
-    segmentos = []
+    cortes = sorted(set(cortes))
+    segs = []
     for i in range(len(cortes) - 1):
         ini, fin = cortes[i], cortes[i+1]
-        if texto[ini:fin].strip():
-            segmentos.append((ini, fin))
-    return segmentos
+        if len(texto[ini:fin].strip()) > 8:
+            segs.append((ini, fin))
+    return segs
 
-
-def extraer_oracion(texto_original, keyword_norm, max_chars=160):
+def extraer_oracion(texto_original, keyword_norm, max_chars=120):
     """
-    A prueba de reseñas sin puntuación:
-    1. Parte el texto en segmentos pequeños
-    2. Busca el segmento que contiene la keyword
-    3. Si es <= max_chars → devuelve limpio
-    4. Si es mayor → DESCARTA. Nunca trunca, nunca muestra texto incompleto.
+    Extrae el segmento COMPLETO que contiene la keyword.
+    Regla de oro: si no cabe completo (<= max_chars), DESCARTA.
+    Nunca trunca. Nunca muestra texto incompleto.
     """
     texto_n = norm(texto_original)
     idx_n   = texto_n.find(keyword_norm)
@@ -111,7 +115,7 @@ def extraer_oracion(texto_original, keyword_norm, max_chars=160):
             if keyword_norm not in norm(fragmento):
                 continue
             if len(fragmento) > max_chars:
-                return ""   # demasiado largo → descartar
+                return ""
             return limpiar_frase(fragmento)
 
     return ""
@@ -138,7 +142,7 @@ def calcular_criterios(resenas_texto):
         if conteos[criterio] >= MIN_MENCIONES.get(criterio, 2):
             resultado[criterio] = True
 
-    # Si un criterio es True pero no tiene frases válidas → quitar el criterio
+    # criterio True pero sin frases válidas → desactivar
     for criterio in CRITERIOS:
         if resultado[criterio] and not frases[criterio]:
             resultado[criterio] = False
