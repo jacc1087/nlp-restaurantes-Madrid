@@ -1041,7 +1041,7 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             df["_score_calidad"] * 0.50
         )
     else:
-        # Sin match: solo calidad
+        # Sin ningún anclaje — no devolver nada
         df["_score_final"] = df["_score_calidad"]
 
     # ── Filtrar por criterios detectados ──────────────────────────
@@ -1091,12 +1091,27 @@ def _buscar(consulta: str) -> tuple[list, dict]:
             dist_km = row["_dist_zona"]
         restaurantes.append(_fila_a_restaurante(row, distancia_km=dist_km))
 
+    # ── Sin ningún anclaje reconocible → pedir que reformule ─────────────────
+    # No devolver ranking por calidad si el usuario no especificó nada concreto
+    sin_anclaje = (
+        not cocina
+        and not zona_coords
+        and not criterios
+        and not hay_plato
+    )
+    if sin_anclaje:
+        return [], {
+            "cocina": None, "zona": None, "criterios": [],
+            "n_total": 0, "tokens_plato": [], "hay_plato": False,
+            "sin_anclaje": True,
+        }
+
     meta = {
         "cocina":       cocina,
         "zona":         zona_coords,
         "criterios":    criterios,
         "n_total":      len(df_filtrado),
-        "tokens_plato": tokens_plato,   # para el texto de intro
+        "tokens_plato": tokens_plato,
         "hay_plato":    hay_plato,
     }
     return restaurantes, meta
@@ -1130,10 +1145,16 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
                 f"No he encontrado restaurantes que destaquen por {plato}{zona_txt}. "
                 f"Prueba con un término diferente o amplía la zona de búsqueda."
             )
+        if meta.get("sin_anclaje"):
+            return (
+                "No he entendido bien tu búsqueda. "
+                "Puedes preguntarme por una cocina (italiana, gallega, japonesa...), "
+                "un plato (croquetas, pulpo, sushi...), una zona de Madrid (Malasaña, Retiro, Chamberí...) "
+                "o una situación (romántico, con niños, con terraza...). ¿Qué estás buscando?"
+            )
         return (
-            "No he encontrado nada con esos términos. "
-            "Prueba con un tipo de cocina (italiana, japonesa, gallega...), "
-            "un plato concreto (croquetas, pulpo, sushi...) o una zona de Madrid."
+            "No he encontrado restaurantes que encajen con tu búsqueda. "
+            "Prueba con otro plato, cocina o zona de Madrid."
         )
 
     cocina    = meta.get("cocina")
