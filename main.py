@@ -211,7 +211,10 @@ def _cargar_dataframe() -> pd.DataFrame:
 
     # Parsear columnas de criterios booleanos (pueden venir como string "True"/"False")
     for col in ["criterio_ninos", "criterio_mascotas", "criterio_terraza",
-                "criterio_vistas", "criterio_musica_directo", "criterio_romantico"]:
+                "criterio_vistas", "criterio_musica_directo", "criterio_romantico",
+                   "criterio_buen_postre", "criterio_precio_calidad",
+                   "criterio_grupos_grandes", "criterio_vegano_vegetariano",
+                   "criterio_sin_gluten"]:
         if col in df.columns:
             df[col] = df[col].apply(lambda v: str(v).strip().lower() == "true" if not isinstance(v, bool) else v)
         else:
@@ -778,15 +781,23 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
     """Evalúa si un restaurante cumple un criterio de filtro."""
     # Criterios derivados de columnas NLP directas
     MAPA_CRITERIO_COL = {
-        "ninos":          "criterio_ninos",
-        "mascotas":       "criterio_mascotas",
-        "terraza":        "criterio_terraza",
-        "vistas":         "criterio_vistas",
-        "musica_directo": "criterio_musica_directo",
-        "romantico":      "criterio_romantico",
+        "ninos":               "criterio_ninos",
+        "mascotas":            "criterio_mascotas",
+        "terraza":             "criterio_terraza",
+        "vistas":              "criterio_vistas",
+        "musica_directo":      "criterio_musica_directo",
+        "romantico":           "criterio_romantico",
+        "buen_postre":         "criterio_buen_postre",
+        "precio_calidad":      "criterio_precio_calidad",
+        "grupos_grandes":      "criterio_grupos_grandes",
+        "vegano_vegetariano":  "criterio_vegano_vegetariano",
+        "sin_gluten":          "criterio_sin_gluten",
     }
     if criterio in MAPA_CRITERIO_COL:
-        return bool(row.get(MAPA_CRITERIO_COL[criterio], False))
+        val = row.get(MAPA_CRITERIO_COL[criterio], False)
+        if isinstance(val, str):
+            val = val.strip().lower() == "true"
+        return bool(val)
 
     # Criterios derivados de dimensiones numéricas
     if criterio == "tranquilo":
@@ -803,7 +814,6 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
     if criterio == "centrico":
         dist = row.get("dist_sol")
         return dist is not None and float(dist) <= 1.5
-
     return True
 
 
@@ -851,11 +861,16 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         resumen = ". ".join(partes) if partes else ""
 
     # Mapear criterios de Proyecto B → campos booleanos que espera el React
-    criterio_ninos    = bool(row.get("criterio_ninos", False))
-    criterio_mascotas = bool(row.get("criterio_mascotas", False))
-    criterio_terraza  = bool(row.get("criterio_terraza", False))
-    criterio_romantico = bool(row.get("criterio_romantico", False))
-    criterio_vistas   = bool(row.get("criterio_vistas", False))
+    criterio_ninos             = bool(row.get("criterio_ninos", False))
+    criterio_mascotas          = bool(row.get("criterio_mascotas", False))
+    criterio_terraza           = bool(row.get("criterio_terraza", False))
+    criterio_romantico         = bool(row.get("criterio_romantico", False))
+    criterio_vistas            = bool(row.get("criterio_vistas", False))
+    criterio_buen_postre       = bool(row.get("criterio_buen_postre", False))
+    criterio_precio_calidad    = bool(row.get("criterio_precio_calidad", False))
+    criterio_grupos_grandes    = bool(row.get("criterio_grupos_grandes", False))
+    criterio_vegano_veg        = bool(row.get("criterio_vegano_vegetariano", False))
+    criterio_sin_gluten        = bool(row.get("criterio_sin_gluten", False))
 
     # Derivar criterios del Proyecto A desde dimensiones NLP del Proyecto B
     # buena_comida: % positivo en dimensión comida
@@ -917,6 +932,16 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "recomendable_en_pareja":       criterio_romantico,
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
+        # Criterios nuevos — positivos
+        "buen_postre":                  criterio_buen_postre,
+        "buena_relacion_calidad_precio": criterio_precio_calidad,
+        "apto_grupos":                  criterio_grupos_grandes,
+        "opciones_veganas":             criterio_vegano_veg,
+        "apto_celiaco":                 criterio_sin_gluten,
+        # Advertencias — negativos (se muestran en rojo en Ver detalles)
+        "aviso_espera_larga":           float(row.get("velocidad_neg", 0) or 0) > 4,
+        "aviso_precio_elevado":         float(row.get("precio_neg", 0) or 0) > 4,
+        "aviso_servicio_mejorable":     float(row.get("servicio_neg", 0) or 0) > 6,
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
         "_avg_estrellas":               float(row.get("avg_estrellas_modelo", 0) or 0),
@@ -1173,11 +1198,20 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
         intro_parts.append(f"cocina {cocina}")
     if criterios:
         etiquetas = {
-            "romantico": "ambiente romántico", "ninos": "apto para niños",
-            "mascotas": "que admiten mascotas", "terraza": "con terraza",
-            "vistas": "con vistas", "musica_directo": "con música en directo",
-            "tranquilo": "tranquilos", "precio_ok": "con buen precio",
-            "muy_valorado": "muy valorados",
+            "romantico":          "ambiente romántico",
+            "ninos":              "apto para niños",
+            "mascotas":           "que admiten mascotas",
+            "terraza":            "con terraza",
+            "vistas":             "con vistas",
+            "musica_directo":     "con música en directo",
+            "tranquilo":          "tranquilos",
+            "precio_ok":          "con buen precio",
+            "muy_valorado":       "muy valorados",
+            "buen_postre":        "con buenos postres",
+            "precio_calidad":     "con buena relación calidad-precio",
+            "grupos_grandes":     "aptos para grupos o celebraciones",
+            "vegano_vegetariano": "con opciones veganas o vegetarianas",
+            "sin_gluten":         "con opciones sin gluten",
         }
         intro_parts.append(", ".join(etiquetas.get(c, c) for c in criterios))
 
