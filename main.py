@@ -199,7 +199,7 @@ def _cargar_dataframe() -> pd.DataFrame:
     # Parsear columnas de criterios booleanos (pueden venir como string "True"/"False")
     for col in ["criterio_ninos", "criterio_mascotas", "criterio_terraza",
                 "criterio_vistas", "criterio_musica_directo", "criterio_romantico",
-                   "criterio_buen_postre", "criterio_precio_calidad",
+                   "criterio_precio_calidad",
                    "criterio_grupos_grandes", "criterio_vegano_vegetariano",
                    "criterio_sin_gluten"]:
         if col in df.columns:
@@ -515,6 +515,8 @@ INTENCIONES_CRITERIO = {
     "musica_directo": ["musica en directo", "musica directo", "concierto",
                        "actuacion", "banda", "en vivo", "jazz", "flamenco"],
     "tranquilo": ["tranquilo", "tranquila", "silencioso", "sin ruido", "reposado", "relajado"],
+    "buen_ambiente": ["buen ambiente", "buena atmosfera", "atmosfera", "acogedor", "acogedora",
+                      "ambiente bonito", "ambiente agradable", "decoracion", "local bonito"],
     "precio_ok": ["economico", "barato", "precio", "relacion calidad", "asequible", "no muy caro"],
     "muy_valorado": ["mejor valorado", "mas valorado", "top", "el mejor", "altamente recomendado"],
 }
@@ -810,7 +812,6 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
         "vistas":              "criterio_vistas",
         "musica_directo":      "criterio_musica_directo",
         "romantico":           "criterio_romantico",
-        "buen_postre":         "criterio_buen_postre",
         "precio_calidad":      "criterio_precio_calidad",
         "grupos_grandes":      "criterio_grupos_grandes",
         "vegano_vegetariano":  "criterio_vegano_vegetariano",
@@ -823,6 +824,9 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
         return bool(val)
 
     # Criterios derivados de dimensiones numéricas
+    if criterio == "buen_ambiente":
+        amb_avg = float(row.get("ambiente_avg_stars", 0) or 0)
+        return amb_avg >= 4.0 if amb_avg > 0 else False
     if criterio == "tranquilo":
         ruido_neg = float(row.get("ruido_neg", 0) or 0)
         ruido_avg = float(row.get("ruido_avg_stars", 0) or 0)
@@ -909,7 +913,6 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
     criterio_terraza           = bool(row.get("criterio_terraza", False))
     criterio_romantico         = bool(row.get("criterio_romantico", False))
     criterio_vistas            = bool(row.get("criterio_vistas", False))
-    criterio_buen_postre       = bool(row.get("criterio_buen_postre", False))
     criterio_precio_calidad    = bool(row.get("criterio_precio_calidad", False))
     criterio_grupos_grandes    = bool(row.get("criterio_grupos_grandes", False))
     criterio_vegano_veg        = bool(row.get("criterio_vegano_vegetariano", False))
@@ -976,7 +979,6 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "buenas_vistas":                criterio_vistas,
         "acceso_minusvalidos":          False,  # no existe en Proyecto B
         # Criterios nuevos — positivos
-        "buen_postre":                  criterio_buen_postre,
         "buena_relacion_calidad_precio": criterio_precio_calidad,
         "apto_grupos":                  criterio_grupos_grandes,
         "opciones_veganas":             criterio_vegano_veg,
@@ -985,11 +987,12 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
         "aviso_espera_larga":           float(row.get("velocidad_neg", 0) or 0) > 4,
         "aviso_precio_elevado":         float(row.get("precio_neg", 0) or 0) > 4,
         "aviso_servicio_mejorable":     float(row.get("servicio_neg", 0) or 0) > 6,
+        "aviso_ruido":                  float(row.get("ruido_neg", 0) or 0) > 4,
         # Frases de reseñas que justifican cada criterio
         "frases_criterios": {
             k: str(row.get(f"criterio_{k}_frases", "") or "")
             for k in ["ninos", "mascotas", "terraza", "vistas", "musica_directo",
-                      "romantico", "buen_postre", "precio_calidad",
+                      "romantico", "precio_calidad",
                       "grupos_grandes", "vegano_vegetariano", "sin_gluten"]
             if str(row.get(f"criterio_{k}_frases", "") or "").strip()
             and str(row.get(f"criterio_{k}_frases", "")).strip().lower() not in ("nan", "none", "")
@@ -1287,9 +1290,9 @@ def _generar_respuesta(consulta: str, restaurantes: list, meta: dict) -> str:
             "vistas":             "con vistas",
             "musica_directo":     "con música en directo",
             "tranquilo":          "tranquilos",
+            "buen_ambiente":      "con buen ambiente",
             "precio_ok":          "con buen precio",
             "muy_valorado":       "muy valorados",
-            "buen_postre":        "con buenos postres",
             "precio_calidad":     "con buena relación calidad-precio",
             "grupos_grandes":     "aptos para grupos o celebraciones",
             "vegano_vegetariano": "con opciones veganas o vegetarianas",
