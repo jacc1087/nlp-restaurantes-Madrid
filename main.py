@@ -454,6 +454,9 @@ COCINAS = {
     # Mediterránea fusión
     "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
                      "couscous marroqui", "tajine", "merguez", "harira"],
+    # Fusión
+    "fusion":       ["nikkei", "tataki", "bao", "baos", "dumpling", "dumplings",
+                     "taco japones", "ceviche nikkei", "wagyu", "tartar de atun"],
 }
 # Nota: COCINAS se mantiene para compatibilidad futura pero la lógica de scoring
 # usa los diccionarios internos de _score_cocina (PLATOS_PROPIOS / PLATOS_COMUNES)
@@ -477,6 +480,7 @@ SINONIMOS_COCINA = {
     "tailandes": "tailandesa", "tailandesa": "tailandesa", "tailandia": "tailandesa", "thai": "tailandesa",
     "americano": "americana", "americana": "americana", "usa": "americana",
     "mediterraneo": "mediterranea", "mediterranea": "mediterranea",
+    "fusion": "fusion", "fusión": "fusion",
 }
 
 FRASES_COCINA = {
@@ -499,6 +503,9 @@ FRASES_COCINA = {
     "cocina griega": "griega", "comida griega": "griega",
     "cocina arabe": "arabe", "comida arabe": "arabe",
     "cocina asturiana": "asturiana", "comida asturiana": "asturiana",
+    "cocina fusion": "fusion", "comida fusion": "fusion",
+    "cocina fusión": "fusion", "comida fusión": "fusion",
+    "restaurante fusion": "fusion", "restaurante fusión": "fusion",
 }
 
 # Mapa de intenciones → criterio (igual que generar_agente.py)
@@ -648,6 +655,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
                         "cocido", "callos", "morcilla", "lechazo", "cordero asado"],
         "mediterranea": ["shakshuka", "baba ganoush", "labneh", "fattoush",
                          "couscous marroqui", "tajine", "merguez", "harira"],
+        "fusion":       ["nikkei", "tiradito nikkei", "causa nikkei", "tataki",
+                         "bao", "baos", "dumpling", "dumplings", "taco japones",
+                         "ceviche nikkei", "wagyu", "tartar de atun"],
     }
     # Platos que aparecen en múltiples cocinas — solo cuentan con contexto
     PLATOS_COMUNES = {
@@ -693,6 +703,8 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "tailandesa": ["thai", "tailand", "bangkok", "siam"],
         "americana":  ["burger", "bbq", "smokehouse", "diner"],
         "española":   ["taberna", "meson", "mesón", "bodega", "tasca"],
+        "fusion":     ["diverxo", "streetxo", "dstage", "bacira", "bestial",
+                       "nikkei", "fusion", "fusión", "casa jaguar"],
     }
     nombre_norm = _norm(str(row.get("nombre_display", "") or ""))
     nombre_bonus = 0.0
