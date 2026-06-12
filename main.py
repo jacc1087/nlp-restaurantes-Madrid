@@ -806,6 +806,26 @@ def _pasa_criterio(row: pd.Series, criterio: str) -> bool:
     return True
 
 
+def _parsear_personal(personal_str: str) -> list:
+    """
+    Convierte "Manuel(7), Ayoub(2), Jose(2)" →
+    [{"nombre": "Manuel", "resenas_positivas": 7}, ...]
+    Devuelve lista vacía si no hay datos.
+    """
+    if not personal_str or personal_str.strip().lower() in ("nan", "none", ""):
+        return []
+    resultado = []
+    for parte in personal_str.split(","):
+        parte = parte.strip()
+        m = re.match(r'^(.+?)\((\d+)\)$', parte)
+        if m:
+            nombre = m.group(1).strip().capitalize()
+            n = int(m.group(2))
+            if nombre and nombre.lower() not in ("nan", "none"):
+                resultado.append({"nombre": nombre, "resenas_positivas": n})
+    return resultado
+
+
 def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) -> dict:
     """
     Convierte una fila del DataFrame al formato exacto que espera el frontend React.
@@ -941,7 +961,7 @@ def _fila_a_restaurante(row: pd.Series, distancia_km: Optional[float] = None) ->
             and str(row.get(f"criterio_{k}_frases", "")).strip().lower() not in ("nan", "none", "")
         },
         "servicio_frases": "" if str(row.get("servicio_frases", "") or "").strip().lower() in ("nan","none","") else str(row.get("servicio_frases", "") or ""),
-        "personal_destacado": "" if str(row.get("personal_destacado", "") or "").strip().lower() in ("nan","none","") else str(row.get("personal_destacado", "") or ""),
+        "personal_destacado": _parsear_personal(str(row.get("personal_destacado", "") or "")),
         "resenas_destacadas": "" if str(row.get("resenas_destacadas", "") or "").strip().lower() in ("nan","none","") else str(row.get("resenas_destacadas", "") or ""),
         # Score NLP para ordenación interna
         "_pct_positivo":                float(row.get("pct_positivo", 0) or 0),
