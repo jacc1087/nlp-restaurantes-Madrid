@@ -240,8 +240,18 @@ def _haversine(a: tuple, b: tuple) -> float:
 
 # Diccionario de zonas de Madrid — igual que en generar_agente.py
 ZONAS_MADRID = {
+    # ── Centro ────────────────────────────────────────────────────────────────
     "sol": SOL_COORDS, "puerta del sol": SOL_COORDS,
     "gran via": (40.4200, -3.7040), "gran vía": (40.4200, -3.7040),
+    "callao": (40.4208, -3.7058),
+    "plaza mayor": (40.4154, -3.7074),
+    "san miguel": (40.4154, -3.7074),
+    "opera": (40.4185, -3.7118), "ópera": (40.4185, -3.7118),
+    "palacio real": (40.4179, -3.7143), "palacio": (40.4179, -3.7143),
+    "centro": SOL_COORDS, "centro madrid": SOL_COORDS,
+    "plaza espana": (40.4238, -3.7148), "plaza españa": (40.4238, -3.7148),
+
+    # ── Barrios del centro ────────────────────────────────────────────────────
     "chueca": (40.4237, -3.6979),
     "malasana": (40.4260, -3.7060), "malasaña": (40.4260, -3.7060),
     "lavapies": (40.4078, -3.7018), "lavapiés": (40.4078, -3.7018),
@@ -249,38 +259,62 @@ ZONAS_MADRID = {
     "huertas": (40.4131, -3.6978), "letras": (40.4131, -3.6978),
     "embajadores": (40.4060, -3.7050),
     "tribunal": (40.4265, -3.6998),
+    "fuencarral": (40.4265, -3.7018),
+
+    # ── Zona norte-centro ─────────────────────────────────────────────────────
     "alonso martinez": (40.4265, -3.6935), "alonso martínez": (40.4265, -3.6935),
     "colon": (40.4238, -3.6888), "colón": (40.4238, -3.6888),
     "recoletos": (40.4238, -3.6898),
-    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844), "el retiro": (40.4153, -3.6844),
-    "salamanca": (40.4298, -3.6831), "serrano": (40.4298, -3.6831),
-    "goya": (40.4248, -3.6788), "jorge juan": (40.4248, -3.6748),
     "chamberi": (40.4350, -3.7000), "chamberí": (40.4350, -3.7000),
     "almagro": (40.4330, -3.6930),
     "arguelles": (40.4268, -3.7168), "argüelles": (40.4268, -3.7168),
     "moncloa": (40.4349, -3.7189),
     "principe pio": (40.4175, -3.7200), "príncipe pío": (40.4175, -3.7200),
-    "opera": (40.4185, -3.7118), "ópera": (40.4185, -3.7118),
-    "palacio real": (40.4179, -3.7143), "palacio": (40.4179, -3.7143),
     "tetuan": (40.4620, -3.6980), "tetuán": (40.4620, -3.6980),
     "cuatro caminos": (40.4456, -3.7010),
     "nuevos ministerios": (40.4488, -3.6922),
     "castellana": (40.4390, -3.6880),
     "azca": (40.4530, -3.6940),
-    "hortaleza": (40.4780, -3.6540),
+
+    # ── Salamanca / Este ──────────────────────────────────────────────────────
+    "salamanca": (40.4298, -3.6831), "serrano": (40.4298, -3.6831),
+    "goya": (40.4248, -3.6788), "jorge juan": (40.4248, -3.6748),
+    "retiro": (40.4153, -3.6844), "parque del retiro": (40.4153, -3.6844), "el retiro": (40.4153, -3.6844),
+
+    # ── Sur ───────────────────────────────────────────────────────────────────
+    "atocha": (40.4072, -3.6898),
+    "prado": (40.4138, -3.6921), "museo del prado": (40.4138, -3.6921),
     "vallecas": (40.3878, -3.6580),
     "usera": (40.3878, -3.7118),
     "carabanchel": (40.3878, -3.7388),
-    "plaza mayor": (40.4154, -3.7074),
-    "san miguel": (40.4154, -3.7074),
-    "prado": (40.4138, -3.6921), "museo del prado": (40.4138, -3.6921),
-    "atocha": (40.4072, -3.6898),
+    "matadero": (40.3950, -3.7060), "matadero madrid": (40.3950, -3.7060),
+    "madrid rio": (40.4072, -3.7200), "madrid río": (40.4072, -3.7200),
+
+    # ── Norte ─────────────────────────────────────────────────────────────────
     "chamartin": (40.4723, -3.6847), "chamartín": (40.4723, -3.6847),
-    "fuencarral": (40.4265, -3.7018),
-    "plaza espana": (40.4238, -3.7148), "plaza españa": (40.4238, -3.7148),
-    "callao": (40.4208, -3.7058),
-    "centro": SOL_COORDS, "centro madrid": SOL_COORDS,
+    "hortaleza": (40.4780, -3.6540),
+    "ciudad universitaria": (40.4456, -3.7200), "complutense": (40.4456, -3.7200),
+
+    # ── Estadios ──────────────────────────────────────────────────────────────
     "bernabeu": (40.4531, -3.6884), "santiago bernabeu": (40.4531, -3.6884),
+    "metropolitano": (40.4361, -3.5996), "estadio metropolitano": (40.4361, -3.5996),
+    "wanda metropolitano": (40.4361, -3.5996), "la peineta": (40.4361, -3.5996),
+
+    # ── Pabellones y recintos ─────────────────────────────────────────────────
+    "wizink": (40.4323, -3.6611), "wizink center": (40.4323, -3.6611),
+    "palacio de los deportes": (40.4323, -3.6611),
+    "ifema": (40.4728, -3.6130), "feria de madrid": (40.4728, -3.6130),
+
+    # ── Mercados y zonas de ocio ──────────────────────────────────────────────
+    "rastro": (40.4083, -3.7089), "el rastro": (40.4083, -3.7089),
+    "mercado san anton": (40.4237, -3.6979), "san anton": (40.4237, -3.6979),
+    "mercado vallehermoso": (40.4390, -3.7060),
+    "mercado maravillas": (40.4456, -3.7010),
+    "caixaforum": (40.4083, -3.6921),
+
+    # ── Parques ───────────────────────────────────────────────────────────────
+    "casa de campo": (40.4153, -3.7388),
+    "parque juan carlos": (40.4780, -3.7200), "parque juan carlos i": (40.4780, -3.7200),
 }
 
 
