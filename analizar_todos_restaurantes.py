@@ -54,7 +54,7 @@ BATCH_SIZE     = 32
 #          ya están bien del procesado anterior y solo quieres añadir columnas
 #          nuevas (criterios, dimensiones, todos_platos).
 # False → procesado completo con normalización y nombres (más caro pero mejor).
-MODO_ECONOMICO = False
+MODO_ECONOMICO = True
 
 # Palabras de negación — usadas para filtrar fragmentos antes de Gemini
 NEGACIONES = {'no','sin','nunca','tampoco','ni','jamás','jamas','nada'}
