@@ -597,12 +597,13 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     (propio o común). Sin eso, score = 0.
     """
     # Para gallega y vasca exigimos más señales propias (más fácil tener 1 plato de marisco suelto)
-    MIN_SEÑALES_PROPIAS = 3 if cocina in ("gallega", "vasca") else 2
+    MIN_SEÑALES_PROPIAS = 2 if cocina in ("gallega", "vasca") else 2
 
     # Platos tan exclusivos que con 1 mención ya son señal válida
     PLATOS_HIPERID = {
         "gallega": {"percebes", "vieiras", "filloas", "tetilla", "pote gallego",
-                    "zorza", "caldo gallego", "lacon", "grelos", "albarino", "ribeiro"},
+                    "zorza", "caldo gallego", "lacon", "grelos", "albarino", "ribeiro",
+                    "cigalas", "zamburinas", "zamburiñas"},
         "vasca":   {"pintxos", "pintxo", "gilda", "txangurro", "kokotxas",
                     "marmitako", "txakoli"},
     }
@@ -610,8 +611,9 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     # Platos propios (muy identificativos) y comunes (necesitan contexto)
     PLATOS_PROPIOS = {
         "gallega":     ["zamburinas", "zamburiñas", "percebes", "navajas", "vieiras",
-                        "berberechos", "caldo gallego", "lacon", "grelos", "padron",
-                        "filloas", "tetilla", "pote gallego", "zorza", "ribeiro", "albarino"],
+                        "berberechos", "cigalas", "almejas", "caldo gallego", "lacon",
+                        "grelos", "padron", "filloas", "tetilla", "pote gallego",
+                        "zorza", "ribeiro", "albarino"],
         "vasca":       ["pintxos", "pintxo", "gilda", "bacalao pil pil", "txangurro",
                         "marmitako", "kokotxas", "txakoli", "chipirones en su tinta",
                         "bacalao al pil pil", "merluza en salsa verde", "pil pil"],
@@ -661,7 +663,7 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
     }
     # Platos que aparecen en múltiples cocinas — solo cuentan con contexto
     PLATOS_COMUNES = {
-        "gallega":    ["pulpo", "empanada", "berberechos", "mejillones", "almejas"],
+        "gallega":    ["pulpo", "empanada", "mejillones", "navajas", "ostras"],
         "vasca":      ["bacalao", "merluza", "anchoas"],
         "italiana":   ["lasana", "lasaña", "bruschetta", "focaccia", "tiramisu",
                        "risotto", "pasta", "pizza"],
@@ -693,7 +695,8 @@ def _score_cocina(row: pd.Series, cocina: str) -> float:
         "japonesa":   ["japon", "sushi", "ramen", "tokyo", "osaka", "sibuya", "nikkei"],
         "italiana":   ["italia", "trattoria", "osteria", "pizzeria", "pasta"],
         "vasca":      ["euskal", "pintxo", "bilbao", "donosti", "txoko"],
-        "gallega":    ["galicia", "galleg", "santiag", "marisqueria", "marisquer"],
+        "gallega":    ["galicia", "galleg", "santiag", "marisqueria", "marisquer",
+                       "ogrelo", "morgana", "montes de galicia"],
         "asturiana":  ["astur", "asturias", "sidrer"],
         "griega":     ["grecia", "greek", "atenas", "hellas"],
         "arabe":      ["lebanese", "arab", "libano", "siria", "halal"],
